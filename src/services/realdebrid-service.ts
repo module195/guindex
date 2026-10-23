@@ -44,6 +44,18 @@ const JUNK_CONTENT_REGEX =
 export class RealDebridService {
   private static readonly INSTANT_AVAILABILITY_TTL_MS = 5 * 60 * 1000; // 5 minutes
   private static instantAvailabilityCache = new Map<string, InstantAvailabilityCacheEntry>();
+  /** Após 401/403 do endpoint instantAvailability, pausa novas chamadas por este período */
+  private static readonly INSTANT_AVAILABILITY_DISABLE_MS = (() => {
+    const parsed = Number.parseInt(process.env.RD_INSTANT_AVAILABILITY_DISABLE_MS ?? '', 10);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : 10 * 60 * 1000;
+  })();
+  /** Chave = header Authorization (por token), para um token ruim não afetar outros usuários */
+  private static instantAvailabilityDisabledUntil = new Map<string, number>();
+
+  private static isInstantAvailabilityDisabled(headers: Record<string, string>): boolean {
+    const until = this.instantAvailabilityDisabledUntil.get(headers.Authorization ?? '');
+    return until !== undefined && Date.now() < until;
+  }
 
   constructor(private token: string) {}
 
@@ -156,9 +168,13 @@ export class RealDebridService {
     }
 
     const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
+    if (this.isInstantAvailabilityDisabled(headers)) {
+      return result;
+    }
     const chunkSize = 50;
 
     for (let i = 0; i < hashesToFetch.length; i += chunkSize) {
+      if (this.isInstantAvailabilityDisabled(headers)) break;
       const chunk = hashesToFetch.slice(i, i + chunkSize);
       const upperChunk = chunk.map((hash) => hash.toUpperCase());
       let chunkPayload = await this.fetchInstantAvailabilityPayload(
@@ -166,7 +182,7 @@ export class RealDebridService {
         headers
       );
 
-      if (!chunkPayload || this.isPayloadEmpty(chunkPayload)) {
+      if ((!chunkPayload || this.isPayloadEmpty(chunkPayload)) && !this.isInstantAvailabilityDisabled(headers)) {
         chunkPayload = await this.fetchInstantAvailabilityPayload(
           `${API_BASE}/torrents/instantAvailability/${upperChunk.join(',')}`,
           headers
@@ -183,6 +199,7 @@ export class RealDebridService {
         continue;
       }
 
+      if (this.isInstantAvailabilityDisabled(headers)) break;
       await this.fetchPerHash(chunk, headers, result, now);
     }
 
@@ -196,6 +213,7 @@ export class RealDebridService {
     now: number
   ): Promise<void> {
     for (const hash of hashes) {
+      if (this.isInstantAvailabilityDisabled(headers)) return;
       const payload = await this.fetchInstantAvailabilityPayload(
         `${API_BASE}/torrents/instantAvailability/${hash.toUpperCase()}`,
         headers
@@ -225,6 +243,14 @@ export class RealDebridService {
       });
       if (response.statusCode >= 400) {
         await response.body.dump();
+        if (response.statusCode === 401 || response.statusCode === 403) {
+          // Token inválido ou endpoint desativado: repetir por hash só gera N chamadas inúteis
+          this.instantAvailabilityDisabledUntil.set(
+            headers.Authorization ?? '',
+            Date.now() + this.INSTANT_AVAILABILITY_DISABLE_MS,
+          );
+          console.warn(`[RealDebrid] instantAvailability retornou ${response.statusCode}; pausando verificações por ${this.INSTANT_AVAILABILITY_DISABLE_MS}ms`);
+        }
         return undefined;
       }
       const json = (await response.body.json()) as InstantAvailabilityRecord;
