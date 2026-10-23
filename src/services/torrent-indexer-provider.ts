@@ -1246,7 +1246,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
 
       // Tentar bulk search primeiro (endpoint /indexers/search)
       try {
-        const url = new URL(`${this.baseUrl}/indexers/search`);
+        const url = new URL(`${this.baseUrl}/search`);
         for (const q of topQueries) {
           url.searchParams.append('q', q);
         }
