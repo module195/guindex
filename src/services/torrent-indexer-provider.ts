@@ -198,6 +198,16 @@ const MAX_STREAMS_PER_SOURCE = parsePositiveInt(
   50,
 );
 const MAX_TEXT_QUERIES = 12;
+const MAX_COLLECT_PER_SOURCE = parsePositiveInt(
+  process.env.TORRENT_INDEXER_COLLECT_PER_SOURCE,
+  40,
+);
+// Quantidade de queries extras (além do mid-path) aquecidas em background.
+// 0 = desligado (comportamento original).
+const WARM_EXTRA_QUERIES = parseNonNegativeInt(
+  process.env.TORRENT_INDEXER_WARM_EXTRA_QUERIES,
+  0,
+);
 const INDEXER_QUERY_PROFILES: Record<string, IndexerQueryProfile> = {
   'comando_torrents': { supportsImdbQuery: false },
   bludv: { supportsImdbQuery: false },
@@ -207,78 +217,78 @@ const INDEXER_QUERY_PROFILES: Record<string, IndexerQueryProfile> = {
   rede_torrent: { supportsImdbQuery: false },
 };
 const EPISODIC_HINT_REGEX =
-  /(S[0-9]{1,3}(E[0-9]{1,3})?|S[0-9]{1,3}[._ -]?(19|20)[0-9]{2}|[0-9]+[xÃ—][0-9]+|temporadas?|season|seasons|temp\.?\s*\d|epis[oÃ³]dios?|epis[oÃ³]dio|episode|episodes|serie|sÃ©rie|sÃ©ries|series|minissÃ©rie|mini[\s-]?s[eÃ©]rie|ep\.?\s*[0-9]+|cap[iÃ­]tulo|capitulo|cap\.?\s*[0-9]+|completa|completo|complete|collection|cole[Ã§c][aÃ£]o|box\s*set|pack|integral|[0-9]+[ÂªÂºa]\s*temp)/i;
+  /(S[0-9]{1,3}(E[0-9]{1,3})?|S[0-9]{1,3}[._ -]?(19|20)[0-9]{2}|[0-9]+[x×][0-9]+|temporadas?|season|seasons|temp\.?\s*\d|epis[oó]dios?|epis[oó]dio|episode|episodes|serie|série|séries|series|minissérie|mini[\s-]?s[eé]rie|ep\.?\s*[0-9]+|cap[ií]tulo|capitulo|cap\.?\s*[0-9]+|completa|completo|complete|collection|cole[çc][aã]o|box\s*set|pack|integral|[0-9]+[ªºa]\s*temp)/i;
 
 const LANGUAGE_FLAG_MAP: Record<string, string> = {
-  portugues: 'ðŸ‡§ðŸ‡·',
-  portuguese: 'ðŸ‡§ðŸ‡·',
-  'brazilian portuguese': 'ðŸ‡§ðŸ‡·',
-  ingles: 'ðŸ‡ºðŸ‡¸',
-  english: 'ðŸ‡ºðŸ‡¸',
-  espanhol: 'ðŸ‡ªðŸ‡¸',
-  spanish: 'ðŸ‡ªðŸ‡¸',
-  frances: 'ðŸ‡«ðŸ‡·',
-  french: 'ðŸ‡«ðŸ‡·',
-  italiano: 'ðŸ‡®ðŸ‡¹',
-  italian: 'ðŸ‡®ðŸ‡¹',
-  alemao: 'ðŸ‡©ðŸ‡ª',
-  german: 'ðŸ‡©ðŸ‡ª',
-  japones: 'ðŸ‡¯ðŸ‡µ',
-  japanese: 'ðŸ‡¯ðŸ‡µ',
-  coreano: 'ðŸ‡°ðŸ‡·',
-  korean: 'ðŸ‡°ðŸ‡·',
-  chines: 'ðŸ‡¨ðŸ‡³',
-  chinese: 'ðŸ‡¨ðŸ‡³',
-  mandarim: 'ðŸ‡¨ðŸ‡³',
-  mandarin: 'ðŸ‡¨ðŸ‡³',
-  cantones: 'ðŸ‡­ðŸ‡°',
-  cantonese: 'ðŸ‡­ðŸ‡°',
-  russo: 'ðŸ‡·ðŸ‡º',
-  russian: 'ðŸ‡·ðŸ‡º',
-  hindi: 'ðŸ‡®ðŸ‡³',
-  arabe: 'ðŸ‡¸ðŸ‡¦',
-  arabic: 'ðŸ‡¸ðŸ‡¦',
-  turco: 'ðŸ‡¹ðŸ‡·',
-  turkish: 'ðŸ‡¹ðŸ‡·',
-  polones: 'ðŸ‡µðŸ‡±',
-  polish: 'ðŸ‡µðŸ‡±',
-  sueco: 'ðŸ‡¸ðŸ‡ª',
-  swedish: 'ðŸ‡¸ðŸ‡ª',
-  noruegues: 'ðŸ‡³ðŸ‡´',
-  norwegian: 'ðŸ‡³ðŸ‡´',
-  dinamarques: 'ðŸ‡©ðŸ‡°',
-  danish: 'ðŸ‡©ðŸ‡°',
-  finlandes: 'ðŸ‡«ðŸ‡®',
-  finnish: 'ðŸ‡«ðŸ‡®',
-  tcheco: 'ðŸ‡¨ðŸ‡¿',
-  czech: 'ðŸ‡¨ðŸ‡¿',
-  hungaro: 'ðŸ‡­ðŸ‡º',
-  hungarian: 'ðŸ‡­ðŸ‡º',
-  ucraniano: 'ðŸ‡ºðŸ‡¦',
-  ukrainian: 'ðŸ‡ºðŸ‡¦',
-  tailandes: 'ðŸ‡¹ðŸ‡­',
-  thai: 'ðŸ‡¹ðŸ‡­',
-  vietnamita: 'ðŸ‡»ðŸ‡³',
-  vietnamese: 'ðŸ‡»ðŸ‡³',
-  holandes: 'ðŸ‡³ðŸ‡±',
-  dutch: 'ðŸ‡³ðŸ‡±',
-  grego: 'ðŸ‡¬ðŸ‡·',
-  greek: 'ðŸ‡¬ðŸ‡·',
-  hebraico: 'ðŸ‡®ðŸ‡±',
-  hebrew: 'ðŸ‡®ðŸ‡±',
-  romeno: 'ðŸ‡·ðŸ‡´',
-  romanian: 'ðŸ‡·ðŸ‡´',
-  bulgaro: 'ðŸ‡§ðŸ‡¬',
-  bulgarian: 'ðŸ‡§ðŸ‡¬',
-  croata: 'ðŸ‡­ðŸ‡·',
-  croatian: 'ðŸ‡­ðŸ‡·',
-  islandes: 'ðŸ‡®ðŸ‡¸',
-  icelandic: 'ðŸ‡®ðŸ‡¸',
-  persa: 'ðŸ‡®ðŸ‡·',
-  persian: 'ðŸ‡®ðŸ‡·',
-  farsi: 'ðŸ‡®ðŸ‡·',
-  latin: 'ðŸ‡»ðŸ‡¦',
-  latim: 'ðŸ‡»ðŸ‡¦',
+  portugues: '🇧🇷',
+  portuguese: '🇧🇷',
+  'brazilian portuguese': '🇧🇷',
+  ingles: '🇺🇸',
+  english: '🇺🇸',
+  espanhol: '🇪🇸',
+  spanish: '🇪🇸',
+  frances: '🇫🇷',
+  french: '🇫🇷',
+  italiano: '🇮🇹',
+  italian: '🇮🇹',
+  alemao: '🇩🇪',
+  german: '🇩🇪',
+  japones: '🇯🇵',
+  japanese: '🇯🇵',
+  coreano: '🇰🇷',
+  korean: '🇰🇷',
+  chines: '🇨🇳',
+  chinese: '🇨🇳',
+  mandarim: '🇨🇳',
+  mandarin: '🇨🇳',
+  cantones: '🇭🇰',
+  cantonese: '🇭🇰',
+  russo: '🇷🇺',
+  russian: '🇷🇺',
+  hindi: '🇮🇳',
+  arabe: '🇸🇦',
+  arabic: '🇸🇦',
+  turco: '🇹🇷',
+  turkish: '🇹🇷',
+  polones: '🇵🇱',
+  polish: '🇵🇱',
+  sueco: '🇸🇪',
+  swedish: '🇸🇪',
+  noruegues: '🇳🇴',
+  norwegian: '🇳🇴',
+  dinamarques: '🇩🇰',
+  danish: '🇩🇰',
+  finlandes: '🇫🇮',
+  finnish: '🇫🇮',
+  tcheco: '🇨🇿',
+  czech: '🇨🇿',
+  hungaro: '🇭🇺',
+  hungarian: '🇭🇺',
+  ucraniano: '🇺🇦',
+  ukrainian: '🇺🇦',
+  tailandes: '🇹🇭',
+  thai: '🇹🇭',
+  vietnamita: '🇻🇳',
+  vietnamese: '🇻🇳',
+  holandes: '🇳🇱',
+  dutch: '🇳🇱',
+  grego: '🇬🇷',
+  greek: '🇬🇷',
+  hebraico: '🇮🇱',
+  hebrew: '🇮🇱',
+  romeno: '🇷🇴',
+  romanian: '🇷🇴',
+  bulgaro: '🇧🇬',
+  bulgarian: '🇧🇬',
+  croata: '🇭🇷',
+  croatian: '🇭🇷',
+  islandes: '🇮🇸',
+  icelandic: '🇮🇸',
+  persa: '🇮🇷',
+  persian: '🇮🇷',
+  farsi: '🇮🇷',
+  latin: '🇻🇦',
+  latim: '🇻🇦',
 };
 
 const LANGUAGE_ALIASES: Record<string, string> = {
@@ -410,16 +420,28 @@ const BACKGROUND_WARM_DELAY_MS = 2000;
 
 class GlobalIndexerQueue {
   private queue: Array<() => Promise<void>> = [];
+  private readonly pending = new Set<string>();
   private activeWorkers = 0;
   private readonly delayMs: number;
   private readonly concurrency: number;
+  private readonly maxSize: number;
 
   constructor() {
     this.delayMs = parseNonNegativeInt(process.env.TORRENT_INDEXER_GLOBAL_QUEUE_DELAY_MS, 1500);
     this.concurrency = parsePositiveInt(process.env.TORRENT_INDEXER_GLOBAL_QUEUE_CONCURRENCY, 1);
+    this.maxSize = parsePositiveInt(process.env.TORRENT_INDEXER_GLOBAL_QUEUE_MAX, 200);
   }
 
   async add(task: () => Promise<void>, label: string, context?: MatchContext) {
+    if (this.pending.has(label)) {
+      logReq(context, `⏭️ [Fila Global] Já na fila, ignorando duplicata: ${label}`);
+      return;
+    }
+    if (this.queue.length >= this.maxSize) {
+      logReq(context, `🚫 [Fila Global] Fila cheia (${this.maxSize}); descartando: ${label}`);
+      return;
+    }
+    this.pending.add(label);
     logReq(context, `📥 [Fila Global] Adicionado na fila: ${label}. Tamanho atual: ${this.queue.length + 1}`);
     this.queue.push(async () => {
       logReq(context, `⚙️ [Fila Global] Processando: ${label}`);
@@ -427,6 +449,8 @@ class GlobalIndexerQueue {
         await task();
       } catch (e) {
         console.error(`[GuIndex] ❌ [Fila Global] Erro ao processar ${label}:`, e);
+      } finally {
+        this.pending.delete(label);
       }
     });
     this.process();
@@ -543,15 +567,23 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     const forceFresh = options?.forceFresh === true;
     const parsed = this.parseId(id);
     const metaLookupId = parsed.imdbId ?? parsed.query ?? (id || '').split(':')[0] ?? id;
-    const meta = await this.fetchCinemetaMeta(type, metaLookupId, forceFresh);
+    const [meta, localizedTitlesRaw] = await Promise.all([
+      this.fetchCinemetaMeta(type, metaLookupId, forceFresh),
+      parsed.imdbId
+        ? this.fetchLocalizedTitleCandidates(parsed.imdbId, forceFresh)
+        : Promise.resolve<string[]>([]),
+    ]);
     let displayTitles = this.collectMetaTitles(meta);
     
     let localizedTitles: string[] = [];
     if (parsed.imdbId) {
-      localizedTitles = await this.fetchLocalizedTitleCandidates(parsed.imdbId, forceFresh);
+      localizedTitles = localizedTitlesRaw;
       
       if (type === 'series') {
-        const fallback = await this.fetchCinemetaMeta('series', parsed.imdbId, forceFresh);
+        // Evita chamada duplicada ao Cinemeta quando o lookup acima já foi o mesmo
+        const fallback = metaLookupId === parsed.imdbId
+          ? meta
+          : await this.fetchCinemetaMeta('series', parsed.imdbId, forceFresh);
         if (fallback?.name) displayTitles.push(fallback.name);
         if (fallback?.aliases) displayTitles.push(...fallback.aliases);
       }
@@ -647,8 +679,12 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     );
 
     // Warm remaining queries in background (slow-path)
-    if (!forceFresh && uniqueQueries.length < MAX_TEXT_QUERIES) {
-      const remainingQueries = textQueries.slice(uniqueQueries.length, MAX_TEXT_QUERIES);
+    if (!forceFresh && WARM_EXTRA_QUERIES > 0) {
+      // Antes: textQueries.slice(uniqueQueries.length, ...) quase sempre resultava vazio,
+      // pois uniqueQueries já contém textQueries. Agora é opt-in via env.
+      const remainingQueries = textQueries
+        .filter((q) => q && !midPathQueries.includes(q))
+        .slice(0, Math.min(WARM_EXTRA_QUERIES, MAX_TEXT_QUERIES));
       if (remainingQueries.length > 0) {
         this.warmRemainingQueriesInBackground(remainingQueries, context);
       }
@@ -817,7 +853,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
 
       const sourceKey = (stream.source ?? 'unknown').toLowerCase();
       const sourceCount = sourceCounts.get(sourceKey) ?? 0;
-      if (sourceCount >= 40) continue;
+      if (sourceCount >= MAX_COLLECT_PER_SOURCE) continue;
 
       streams.push(stream);
       sourceCounts.set(sourceKey, sourceCount + 1);
@@ -952,7 +988,10 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
         signal: AbortSignal.timeout(5_000),
         headers: { Accept: 'application/json' },
       });
-      if (response.statusCode >= 400) return [];
+      if (response.statusCode >= 400) {
+        await response.body.dump().catch(() => undefined);
+        return [];
+      }
       const payload = await response.body.json();
       return this.normalizeTorrentPayload(payload);
     } catch {
@@ -990,9 +1029,12 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
       if (!query) continue;
       
       globalQueue.add(async () => {
-        const cacheKey = this.getSearchCacheKey(query);
-        const cached = TorrentIndexerProvider.searchCache.get(cacheKey);
-        if (cached && Date.now() - cached.ts < TorrentIndexerProvider.SEARCH_CACHE_TTL_MS) {
+        const now = Date.now();
+        const isFresh = (key: string) => {
+          const entry = TorrentIndexerProvider.searchCache.get(key);
+          return !!entry && now - entry.ts < TorrentIndexerProvider.SEARCH_CACHE_TTL_MS;
+        };
+        if (isFresh(this.getSearchCacheKey(query)) || isFresh(this.getSlowPathCacheKey(query))) {
           return;
         }
 
@@ -1067,7 +1109,11 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
       }
     }
 
-    return this.rankTorrentsByQuery(merged, query);
+    const ranked = this.rankTorrentsByQuery(merged, query);
+    if (ranked.length > 0) {
+      TorrentIndexerProvider.searchCache.set(this.getSlowPathCacheKey(query), { ts: Date.now(), data: ranked });
+    }
+    return ranked;
   }
 
   private async fetchIndexerNames(): Promise<string[]> {
@@ -1114,6 +1160,10 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     return `${this.baseUrl}|${query.trim().toLowerCase()}`;
   }
 
+  private getSlowPathCacheKey(query: string): string {
+    return `slow|${this.getSearchCacheKey(query)}`;
+  }
+
   private async fetchMultiSearchResults(
     queries: string[],
     fastPathOnly = false,
@@ -1135,11 +1185,14 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
 
     // Se tivermos resultados suficientes ou for apenas FastPath, retornamos
     if (fastPathOnly || this.hasSufficientResults(searchResults, primaryQuery, context)) {
-      if (!fastPathOnly && !forceFresh) {
-        const ranked = this.rankTorrentsByQuery(searchResults, primaryQuery);
+      if (fastPathOnly) {
+        return searchResults;
+      }
+      const ranked = this.rankTorrentsByQuery(searchResults, primaryQuery);
+      if (!forceFresh) {
         TorrentIndexerProvider.searchCache.set(cacheKey, { ts: Date.now(), data: ranked });
       }
-      return searchResults;
+      return ranked;
     }
 
     // 2) Fase 2: Mid-Path (Sync Scrape via indexers específicos rápidos)
@@ -1180,7 +1233,10 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
         headers: { Accept: 'application/json' },
         signal: AbortSignal.timeout(8000),
       });
-      if (response.statusCode >= 400) return [];
+      if (response.statusCode >= 400) {
+        await response.body.dump().catch(() => undefined);
+        return [];
+      }
       const payload = await response.body.json();
       return this.normalizeTorrentPayload(payload);
     } catch {
@@ -1201,8 +1257,9 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
 
     // Deadline global: garante que NUNCA ultrapassamos o timeout,
     // mesmo com fallback cascateado (bulk → individual).
+    let deadlineHandle: ReturnType<typeof setTimeout> | undefined;
     const deadlineTimer = new Promise<TorrentLike[]>((resolve) => {
-      setTimeout(() => {
+      deadlineHandle = setTimeout(() => {
         logReq(context, `⏰ Mid-path deadline global de ${globalDeadlineMs}ms atingido.`);
         resolve([]);
       }, globalDeadlineMs);
@@ -1271,7 +1328,11 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     };
 
     // Promise.race garante que o deadline global é respeitado
-    return Promise.race([doSearch(), deadlineTimer]);
+    try {
+      return await Promise.race([doSearch(), deadlineTimer]);
+    } finally {
+      if (deadlineHandle) clearTimeout(deadlineHandle);
+    }
   }
 
   private async fetchSearchResultsFromCandidates(
@@ -1349,12 +1410,14 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
         signal: AbortSignal.timeout(TorrentIndexerProvider.FALLBACK_REQUEST_TIMEOUT_MS),
         headers: { Accept: 'application/json' },
       });
-      if (response.statusCode >= 500) {
+      if (response.statusCode >= 500 || response.statusCode === 403 || response.statusCode === 429) {
+        await response.body.dump().catch(() => undefined);
         this.recordIndexerFailure(normalizedIndexer);
         this.recordIndexerPerformance(normalizedIndexer, Date.now() - startedAt, 0);
         return [];
       }
       if (response.statusCode >= 400) {
+        await response.body.dump().catch(() => undefined);
         this.recordIndexerPerformance(normalizedIndexer, Date.now() - startedAt, 0);
         return [];
       }
@@ -2511,32 +2574,32 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
 
   private static readonly SEASON_PATTERNS: { regex: RegExp; group: number }[] = [
     { regex: /\bS(\d{1,3})(?:E\d{1,3})?\b/i, group: 1 },
-    { regex: /\b(\d{1,2})[xÃ—]\d{1,3}\b/i, group: 1 },
-    { regex: /(\d{1,3})[ÂªÂºáµƒáµ’aAoO]\s*temporada/i, group: 1 },
+    { regex: /\b(\d{1,2})[x×]\d{1,3}\b/i, group: 1 },
+    { regex: /(\d{1,3})[ªºᵃᵒaAoO]\s*temporada/i, group: 1 },
     { regex: /\b(?:temporada|season)\s*(\d{1,3})\b/i, group: 1 },
     { regex: /\btemp\.?\s*(\d{1,3})\b/i, group: 1 },
-    { regex: /(\d{1,3})[ÂªÂºáµƒáµ’aAoO]\s*temp\b/i, group: 1 },
+    { regex: /(\d{1,3})[ªºᵃᵒaAoO]\s*temp\b/i, group: 1 },
     { regex: /(?:^|[\s._\-\[\(])T(\d{1,2})(?:[\s._\-\]\)]|$)/i, group: 1 },
     { regex: /\bpack\s+(?:temporada|season|temp\.?)\s*(\d{1,3})\b/i, group: 1 },
     { regex: /\bda\s+(\d{1,3})\s*temporada\b/i, group: 1 },
   ];
 
   private static readonly SEASON_RANGE_PATTERNS: { regex: RegExp; startGroup: number; endGroup: number }[] = [
-    { regex: /(\d{1,3})[ÂªÂºáµƒáµ’aAoO]?\s*(?:a|Ã |atÃ©|ao|~|-)\s*(\d{1,3})[ÂªÂºáµƒáµ’aAoO]?\s*temporada/i, startGroup: 1, endGroup: 2 },
-    { regex: /temporadas?\s*(\d{1,3})\s*(?:a|Ã |atÃ©|ao|~|-|e)\s*(\d{1,3})/i, startGroup: 1, endGroup: 2 },
+    { regex: /(\d{1,3})[ªºᵃᵒaAoO]?\s*(?:a|à|até|ao|~|-)\s*(\d{1,3})[ªºᵃᵒaAoO]?\s*temporada/i, startGroup: 1, endGroup: 2 },
+    { regex: /temporadas?\s*(\d{1,3})\s*(?:a|à|até|ao|~|-|e)\s*(\d{1,3})/i, startGroup: 1, endGroup: 2 },
     { regex: /seasons?\s*(\d{1,3})\s*(?:to|through|thru|~|-)\s*(\d{1,3})/i, startGroup: 1, endGroup: 2 },
     { regex: /\bS(\d{1,3})\s*[-~.]\s*S(\d{1,3})\b/i, startGroup: 1, endGroup: 2 },
     { regex: /\bT(\d{1,2})\s*[-~.]\s*T(\d{1,2})\b/i, startGroup: 1, endGroup: 2 },
-    { regex: /\btemp\.?\s*(\d{1,3})\s*(?:a|Ã |atÃ©|ao|~|-)\s*(\d{1,3})/i, startGroup: 1, endGroup: 2 },
+    { regex: /\btemp\.?\s*(\d{1,3})\s*(?:a|à|até|ao|~|-)\s*(\d{1,3})/i, startGroup: 1, endGroup: 2 },
   ];
 
   private static readonly COMPLETE_SERIES_PATTERNS: RegExp[] = [
-    /\b(?:s[eÃ©]rie|series)\s+completa\b/i,
-    /\bcomplete\s+(?:s[eÃ©]rie|series)\b/i,
+    /\b(?:s[eé]rie|series)\s+completa\b/i,
+    /\bcomplete\s+(?:s[eé]rie|series)\b/i,
     /\btodas?\s+(?:as\s+)?temporadas?\b/i,
     /\ball\s+seasons?\b/i,
     /\bcomplete\s+(?:collection|box\s*set|pack)\b/i,
-    /\bcole[Ã§c][Ã£a]o\s+completa\b/i,
+    /\bcole[çc][ãa]o\s+completa\b/i,
     /\bpack\s+completo\b/i,
     /\bintegral\b/i,
     /\bthe\s+complete\s+series\b/i,
@@ -2545,11 +2608,11 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
 
   private static readonly EPISODE_PATTERNS: { regex: RegExp; group: number }[] = [
     { regex: /\bS\d{1,3}E(\d{1,3})\b/i, group: 1 },
-    { regex: /\b\d{1,2}[xÃ—](\d{1,3})\b/i, group: 1 },
+    { regex: /\b\d{1,2}[x×](\d{1,3})\b/i, group: 1 },
     { regex: /\bep\.?\s*(\d{1,3})\b/i, group: 1 },
     { regex: /(?<!S\d{0,3})\bE(\d{1,3})\b/i, group: 1 },
-    { regex: /\b(?:epis[oÃ³]dio|episodio|episode)\s*(\d{1,3})\b/i, group: 1 },
-    { regex: /\b(?:cap[iÃ­]tulo|capitulo|cap)\.?\s*(\d{1,3})\b/i, group: 1 },
+    { regex: /\b(?:epis[oó]dio|episodio|episode)\s*(\d{1,3})\b/i, group: 1 },
+    { regex: /\b(?:cap[ií]tulo|capitulo|cap)\.?\s*(\d{1,3})\b/i, group: 1 },
     { regex: /\bfolge\s*(\d{1,3})\b/i, group: 1 },
     { regex: /#(\d{1,3})\b/, group: 1 },
     { regex: /(?:^|[\/\\])0*(\d{1,3})\s*[-._\s]+[A-Za-z]/, group: 1 },
@@ -2680,7 +2743,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
             break;
           }
         }
-        const ptRangeMatch = text.match(/\b(?:epis[oÃ³]dio|episodio|cap[iÃ­]tulo|capitulo)\s*(\d{1,3})\s*(?:a|ao|atÃ©|~|-)\s*(\d{1,3})\b/i);
+        const ptRangeMatch = text.match(/\b(?:epis[oó]dio|episodio|cap[ií]tulo|capitulo)\s*(\d{1,3})\s*(?:a|ao|até|~|-)\s*(\d{1,3})\b/i);
         if (ptRangeMatch?.[1] && ptRangeMatch?.[2]) {
           const start = parseInt(ptRangeMatch[1], 10);
           const end = parseInt(ptRangeMatch[2], 10);
@@ -2941,7 +3004,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
   // fileIdx is essential for season packs so AIOStreams/debrid knows which file to play.
   // When the API provides files[], selectBestTorrentFile gives us the exact index.
   // When files[] is absent (common for older BR packs), we estimate fileIdx from
-  // the episode number â€” BR packs almost universally sort files by episode order.
+  // the episode number — BR packs almost universally sort files by episode order.
   if (fileIdx !== undefined && fileIdx >= 0) {
     stream.fileIdx = fileIdx;
   } else if (
@@ -3057,7 +3120,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
   /**
    * Build a proper folder/file path for AIOStreams display.
    * When a file was selected from a pack, ensures the path includes a folder prefix
-   * so AIOStreams can show: ðŸ“  Folder Name / ðŸ“„ filename.mkv
+   * so AIOStreams can show: 📁 Folder Name / 📄 filename.mkv
    */
   private buildStreamFileName(
     selectedFilePath: string | undefined,
@@ -3068,7 +3131,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     const fallback = displayTitle || this.extractFileName(torrent) || rawTorrentTitle;
 
     if (!selectedFilePath) {
-      // No file selected from a pack â€” return clean title (likely a single-file torrent)
+      // No file selected from a pack — return clean title (likely a single-file torrent)
       return fallback;
     }
 
@@ -3079,8 +3142,8 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
 
     // The file path is just a bare filename (e.g. "2 - Sick.mp4").
     // Prepend the torrent title as a folder name so AIOStreams shows:
-    //   ðŸ“  The Walking Dead 3Âª Temporada (2012)
-    //   ðŸ“„ 2 - Sick.mp4
+    //   📁 The Walking Dead 3ª Temporada (2012)
+    //   📄 2 - Sick.mp4
     const folderName = this.cleanIndexerTitle(rawTorrentTitle)
       .replace(/\.(mkv|mp4|avi|m4v|ts|m2ts|iso)$/i, '') // remove extension if present
       .replace(/[<>:"|?*]/g, '') // remove invalid path chars
@@ -3271,7 +3334,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     return Array.from(languages);
   }
 
-  private static readonly MIN_VIDEO_SIZE = 5 * 1024 * 1024; // 5 MB â€” anything smaller is junk/ads
+  private static readonly MIN_VIDEO_SIZE = 5 * 1024 * 1024; // 5 MB — anything smaller is junk/ads
 
   private selectBestTorrentFile(torrent: TorrentLike, context: MatchContext): IndexedTorrentFile | undefined {
     const files = this.extractFilesFromTorrent(torrent);
@@ -3288,7 +3351,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
 
     const best = scored[0]?.file;
 
-    // Reject if the best file is too small â€” likely an ad MP4 or NFO
+    // Reject if the best file is too small — likely an ad MP4 or NFO
     if (best && best.size !== undefined && best.size < TorrentIndexerProvider.MIN_VIDEO_SIZE) {
       return undefined;
     }
@@ -3310,7 +3373,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
       score -= 40;
     }
 
-    // Penalize tiny files â€” almost certainly ads, readme, or fake content
+    // Penalize tiny files — almost certainly ads, readme, or fake content
     if (file.size !== undefined && file.size < TorrentIndexerProvider.MIN_VIDEO_SIZE) {
       score -= 50;
     }
@@ -3506,7 +3569,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     'torrentmovies.co': 'Torrent Movies',
     'sitedetorrents.com': 'Site de Torrents',
     'ytsbr.com': 'YTSBR',
-    'limaotorrent.org': 'LimÃ£o Torrent',
+    'limaotorrent.org': 'Limão Torrent',
     'baixarfilmetorrent.net': 'Baixar Filme',
     'thepiratebay.org': 'TPB',
     'rarbg.to': 'RARBG',
