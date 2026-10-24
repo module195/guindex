@@ -3078,10 +3078,10 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     stream.infoHash = infoHash.trim().toLowerCase();
   }
 
-  // fileIdx is essential for season packs so AIOStreams/debrid knows which file to play.
-  // When the API provides files[], selectBestTorrentFile gives us the exact index.
-  // When files[] is absent (common for older BR packs), we estimate fileIdx from
-  // the episode number — BR packs almost universally sort files by episode order.
+  // fileIdx só vem de files[] (selectBestTorrentFile). Sem a lista, não há como saber
+  // a posição do episódio no torrent: um índice chutado gera a chave hash:fileIdx errada
+  // no deduplicador do AIOStreams e pode abrir o arquivo errado no debrid. O resolve do
+  // GuIndex escolhe o arquivo pelo contexto (temporada/episódio), não pelo fileIdx.
   if (fileIdx !== undefined && fileIdx >= 0) {
     stream.fileIdx = fileIdx;
   } else if (
@@ -3090,11 +3090,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     context.parsed.episode > 0 &&
     this.looksLikeSeasonPack(torrent, context)
   ) {
-    // Estimate: episode N is usually at file index N-1 (0-indexed)
-    const estimatedIdx = context.parsed.episode - 1;
-    stream.fileIdx = estimatedIdx;
-
-    // Build a synthetic fileName so AIOStreams can display episode info
+    // Nome sintético só para exibição do episódio
     if (!selectedFileName) {
       const sPad = String(context.parsed.season).padStart(2, '0');
       const ePad = String(context.parsed.episode).padStart(2, '0');
@@ -3295,7 +3291,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
 
   /**
    * Detect whether a torrent looks like a full-season pack without individual file listings.
-   * This is used to decide whether to estimate fileIdx from the episode number.
+   * This is used to decide whether to build a synthetic episode fileName for display.
    */
   private looksLikeSeasonPack(torrent: TorrentLike, context: MatchContext): boolean {
     // If the API already gave us files, selectBestTorrentFile handled it

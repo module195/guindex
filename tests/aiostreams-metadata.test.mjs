@@ -197,6 +197,37 @@ test('A1: stream P2P (magnet, sem token) não anuncia serviço de debrid', () =>
   assert.equal(implicit.behaviorHints.service, undefined);
 });
 
+test('B1: infoHash vai também no link de resolve do debrid', () => {
+  const meta = StreamService.createStreamMetadata({ ...packFile, fileIdx: 1 }, 'https://guindex.example/resolve/abc', {
+    debridProvider: 'realdebrid',
+    viaDebrid: true,
+  });
+  assert.equal(meta.infoHash, HASH);
+  assert.equal(meta.fileIdx, 1);
+});
+
+test('B3: sem token o nome não leva [RD] nem [TB]', () => {
+  const rd = StreamService.createStreamMetadata(packFile, packFile.magnet, {
+    debridProvider: 'realdebrid',
+    viaDebrid: false,
+  });
+  assert.ok(!rd.name.includes('[RD'), rd.name);
+  assert.ok(rd.name.startsWith('GuIndex'), rd.name);
+
+  const tb = StreamService.createStreamMetadata(packFile, packFile.magnet, {
+    debridProvider: 'torbox',
+    viaDebrid: false,
+  });
+  assert.ok(!tb.name.includes('[TB'), tb.name);
+
+  const withToken = StreamService.createStreamMetadata(packFile, 'https://guindex.example/resolve/abc', {
+    debridProvider: 'realdebrid',
+    realDebridReady: true,
+    viaDebrid: true,
+  });
+  assert.ok(withToken.name.startsWith('[RD+] GuIndex'), withToken.name);
+});
+
 test('A3: behaviorHints.filename é o nome cru, sem idioma, tamanho ou indexador', () => {
   const meta = StreamService.createStreamMetadata(packFile, 'https://guindex.example/resolve/abc', { viaDebrid: true });
   assert.equal(meta.behaviorHints.filename, 'Show.S01E02.1080p.WEB-DL.mkv');
@@ -228,4 +259,17 @@ test('fluxo: Tropa de Elite sai só com 🇧🇷 e filename = dn', () => {
   assert.equal(meta.behaviorHints.indexer, 'torrent_dos_filmes');
   assert.equal(meta.behaviorHints.publishDate, '2016-06-29T22:44:46.000Z');
   assert.equal(meta.behaviorHints.folderName, undefined);
+});
+
+test('B2: pack sem files[] não ganha fileIdx chutado', () => {
+  const pack = {
+    title: 'Show S01 1080p WEB-DL Dual Audio',
+    magnet_link: magnet('Show S01 1080p WEB-DL Dual Audio'),
+    size: '8 GB',
+    files: [],
+    seed_count: 10,
+  };
+  const stream = mapTorrent(pack, episodeContext);
+  assert.equal(stream.fileIdx, undefined);
+  assert.equal(stream.infoHash, HASH);
 });
