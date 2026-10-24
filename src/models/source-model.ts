@@ -16,6 +16,14 @@ export interface SourceStream {
   title?: string;
   description?: string;
   fileName?: string;
+  /** Nome cru do arquivo (ou do release, sem lista de arquivos), com extensão; vai para behaviorHints.filename */
+  rawFileName?: string;
+  /** Nome do torrent quando o stream é um arquivo dentro dele */
+  folderName?: string;
+  /** Tamanho total do torrent em bytes quando o stream é um arquivo dentro dele */
+  folderSize?: number;
+  /** Data de publicação no indexador (ISO 8601) */
+  publishDate?: string;
   detailUrl?: string;
   languages?: string[];
   source?: string;
