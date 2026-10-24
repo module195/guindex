@@ -91,9 +91,33 @@ interface IndexedTorrentFile {
   originalIndex: number;
 }
 
-type IndexerQueryProfile = {
-  supportsImdbQuery: boolean;
-};
+/** One entry of "indexers" in the torrent-indexer's /sources?v=2. */
+interface IndexerCapability {
+  name: string;
+  /** undefined = unknown (old /sources without v=2): try every query */
+  supportsText?: boolean;
+  supportsImdb?: boolean;
+  healthy: boolean;
+}
+
+interface IndexerCatalog {
+  ts: number;
+  indexers: IndexerCapability[];
+  /** /indexers/multi is available; undefined = unknown (try it once) */
+  multi?: boolean;
+}
+
+/** One entry of "calls" in the /indexers/multi response. */
+interface MultiCall {
+  indexer?: string;
+  q?: string;
+  state?: string; // ok | error | skipped | timeout
+  status?: number;
+  count?: number;
+  duration_ms?: number;
+  cache?: string;
+  reason?: string;
+}
 
 interface SearchCacheEntry {
   ts: number;
@@ -209,14 +233,7 @@ const WARM_EXTRA_QUERIES = parseNonNegativeInt(
   process.env.TORRENT_INDEXER_WARM_EXTRA_QUERIES,
   0,
 );
-const INDEXER_QUERY_PROFILES: Record<string, IndexerQueryProfile> = {
-  'comando_torrents': { supportsImdbQuery: false },
-  bludv: { supportsImdbQuery: false },
-  filme_torrent: { supportsImdbQuery: false },
-  'starck-filmes': { supportsImdbQuery: false },
-  vaca_torrent: { supportsImdbQuery: false },
-  rede_torrent: { supportsImdbQuery: false },
-};
+const IMDB_QUERY_REGEX = /^tt\d+$/i;
 const EPISODIC_HINT_REGEX =
   /(S[0-9]{1,3}(E[0-9]{1,3})?|S[0-9]{1,3}[._ -]?(19|20)[0-9]{2}|[0-9]+[x×][0-9]+|temporadas?|season|seasons|temp\.?\s*\d|epis[oó]dios?|epis[oó]dio|episode|episodes|serie|série|séries|series|minissérie|mini[\s-]?s[eé]rie|ep\.?\s*[0-9]+|cap[ií]tulo|capitulo|cap\.?\s*[0-9]+|completa|completo|complete|collection|cole[çc][aã]o|box\s*set|pack|integral|[0-9]+[ªºa]\s*temp)/i;
 
@@ -383,13 +400,17 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
   private static indexerNamesCache:
     | { ts: number; names: string[] }
     | undefined;
+  /** Capacidades e saúde dos indexers, lidas de /sources?v=2 */
+  private static indexerCatalogCache: IndexerCatalog | undefined;
   private static readonly SEARCH_CACHE_TTL_MS = parsePositiveInt(
     process.env.TORRENT_INDEXER_SEARCH_CACHE_TTL_MS,
     120_000,
   );
+  // Vale para o catálogo do /sources?v=2, que traz a saúde de cada indexer,
+  // então fica curto (antes eram 10 min só para a lista de nomes).
   private static readonly INDEXER_NAMES_CACHE_TTL_MS = parsePositiveInt(
     process.env.TORRENT_INDEXER_INDEXERS_CACHE_TTL_MS,
-    600_000,
+    120_000,
   );
   private static readonly LOCALIZED_TITLE_CACHE_TTL_MS = parsePositiveInt(
     process.env.TORRENT_INDEXER_LOCALIZED_TITLE_CACHE_TTL_MS,
@@ -963,7 +984,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
 
     const selected = indexers
       .filter((name) => {
-        if (this.shouldSkipIndexer(name)) {
+        if (this.shouldSkipIndexer(name) || !this.indexerSupportsQuery(name, query)) {
           return false;
         }
         if (!excluded || excluded.size === 0) {
@@ -1009,44 +1030,120 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     return ranked;
   }
 
-  private async fetchIndexerNames(): Promise<string[]> {
-    const cached = TorrentIndexerProvider.indexerNamesCache;
+  /**
+   * Nomes dos indexers ativos, na ordem de prioridade. Com includeUnhealthy
+   * false (caminho síncrono), pula os que o /sources?v=2 marca healthy:false.
+   * O aquecimento em background continua chamando esses, senão o torrent-indexer
+   * nunca mais veria uma chamada deles e eles não voltariam a ficar saudáveis.
+   */
+  private async fetchIndexerNames(includeUnhealthy = true): Promise<string[]> {
+    const catalog = await this.fetchIndexerCatalog();
+    if (!catalog) {
+      return [];
+    }
+
+    const names = catalog.indexers
+      .filter((c) => includeUnhealthy || c.healthy)
+      .map((c) => c.name)
+      .filter((name) => !this.shouldSkipIndexer(name));
+    return names.sort((a, b) => this.compareIndexerPriority(a, b));
+  }
+
+  /**
+   * Lê capacidades e saúde de /sources?v=2. Um torrent-indexer antigo ignora o
+   * v=2 e responde só indexer_names: aí as capacidades ficam desconhecidas e
+   * o /indexers/multi não é usado. Em erro, devolve o último catálogo lido.
+   */
+  private async fetchIndexerCatalog(): Promise<IndexerCatalog | undefined> {
+    const cached = TorrentIndexerProvider.indexerCatalogCache;
     if (
       cached &&
       Date.now() - cached.ts < TorrentIndexerProvider.INDEXER_NAMES_CACHE_TTL_MS &&
-      cached.names.length > 0
+      cached.indexers.length > 0
     ) {
-      return cached.names;
+      return cached;
     }
 
-    const url = `${this.baseUrl}/sources`;
     try {
-      const response = await request(url, {
+      const response = await request(`${this.baseUrl}/sources?v=2`, {
         signal: AbortSignal.timeout(7000),
         headers: { Accept: 'application/json' },
       });
       if (response.statusCode >= 400) {
-        return [];
+        await response.body.dump().catch(() => undefined);
+        return cached;
       }
 
       const payload = (await response.body.json()) as Record<string, unknown>;
-      const names = payload?.indexer_names;
-      if (!Array.isArray(names)) {
-        return [];
+      const catalog = this.parseIndexerCatalog(payload);
+      if (!catalog || catalog.indexers.length === 0) {
+        return cached;
       }
-
-      const parsedNames = names
-        .filter((name): name is string => typeof name === 'string' && name.length > 0)
-        .filter((name) => !this.shouldSkipIndexer(name));
-      const sorted = [...parsedNames].sort((a, b) => this.compareIndexerPriority(a, b));
+      TorrentIndexerProvider.indexerCatalogCache = catalog;
+      // getDomainToIndexerMap usa os nomes para reconhecer o indexer pelo domínio
       TorrentIndexerProvider.indexerNamesCache = {
-        ts: Date.now(),
-        names: sorted,
+        ts: catalog.ts,
+        names: catalog.indexers.map((c) => c.name),
       };
-      return sorted;
+      return catalog;
     } catch {
-      return [];
+      return cached;
     }
+  }
+
+  private parseIndexerCatalog(payload: Record<string, unknown>): IndexerCatalog | undefined {
+    const ts = Date.now();
+    if (payload?.api_version === 2 && Array.isArray(payload.indexers)) {
+      const indexers: IndexerCapability[] = [];
+      for (const raw of payload.indexers) {
+        if (!raw || typeof raw !== 'object') continue;
+        const rec = raw as Record<string, unknown>;
+        const name = typeof rec.name === 'string' ? rec.name.trim() : '';
+        if (!name) continue;
+        indexers.push({
+          name,
+          supportsText: typeof rec.supports_text === 'boolean' ? rec.supports_text : undefined,
+          supportsImdb: typeof rec.supports_imdb === 'boolean' ? rec.supports_imdb : undefined,
+          healthy: rec.healthy !== false,
+        });
+      }
+      const features = payload.features as Record<string, unknown> | undefined;
+      return {
+        ts,
+        indexers,
+        multi: typeof features?.multi === 'boolean' ? features.multi : undefined,
+      };
+    }
+
+    const names = payload?.indexer_names;
+    if (!Array.isArray(names)) {
+      return undefined;
+    }
+    return {
+      ts,
+      indexers: names
+        .filter((name): name is string => typeof name === 'string' && name.trim().length > 0)
+        .map((name) => ({ name: name.trim(), healthy: true })),
+      multi: false,
+    };
+  }
+
+  private getIndexerCapability(indexerName: string): IndexerCapability | undefined {
+    const slug = this.normalizeIndexerSlug(indexerName);
+    return TorrentIndexerProvider.indexerCatalogCache?.indexers.find(
+      (c) => this.normalizeIndexerSlug(c.name) === slug,
+    );
+  }
+
+  /** false só quando o /sources?v=2 diz que o indexer não aceita esse tipo de query */
+  private indexerSupportsQuery(indexerName: string, query: string): boolean {
+    const capability = this.getIndexerCapability(indexerName);
+    if (!capability) {
+      return true;
+    }
+    return IMDB_QUERY_REGEX.test(query.trim())
+      ? capability.supportsImdb !== false
+      : capability.supportsText !== false;
   }
 
   private getSearchCacheKey(query: string): string {
@@ -1149,7 +1246,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     const topQueries = queries.slice(0, 3);
 
     // Deadline global: garante que NUNCA ultrapassamos o timeout,
-    // mesmo com fallback cascateado (bulk → individual).
+    // mesmo com fallback cascateado (multi → individual).
     let deadlineHandle: ReturnType<typeof setTimeout> | undefined;
     const deadlineTimer = new Promise<TorrentLike[]>((resolve) => {
       deadlineHandle = setTimeout(() => {
@@ -1158,11 +1255,22 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
       }, globalDeadlineMs);
     });
 
+    const startedAt = Date.now();
     const doSearch = async (): Promise<TorrentLike[]> => {
-      const indexers = await this.fetchIndexerNames();
+      const indexers = (await this.fetchIndexerNames(false))
+        .filter((name) => topQueries.some((q) => this.indexerSupportsQuery(name, q)));
       if (indexers.length === 0) return [];
 
-      // Selecionar indexers rápidos baseado em performance histórica
+      // Fan-out no torrent-indexer: uma chamada para todos os indexers x queries,
+      // com cache, dedup por info_hash e resposta parcial no deadline.
+      if (TorrentIndexerProvider.indexerCatalogCache?.multi !== false) {
+        const remainingMs = globalDeadlineMs - (Date.now() - startedAt);
+        const multiResults = await this.fetchMultiIndexerSearch(topQueries, indexers, remainingMs, context);
+        if (multiResults) return multiResults;
+      }
+
+      // Fallback (torrent-indexer sem /indexers/multi, ou ele falhou): chamadas
+      // individuais só nos indexers mais rápidos pelo histórico local.
       const avgTimes = Array.from(TorrentIndexerProvider.indexerPerformance.values())
         .map(s => s.avgMs)
         .filter(ms => ms > 0);
@@ -1173,51 +1281,16 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
 
       const selected = indexers
         .filter((name) => {
-          if (this.shouldSkipIndexer(name)) return false;
           const slug = this.normalizeIndexerSlug(name);
           const perf = TorrentIndexerProvider.indexerPerformance.get(slug);
           if (!perf || perf.avgMs === 0) return true;
           return perf.avgMs <= maxAllowedMs;
         })
-        .sort((a, b) => this.compareIndexerPriority(a, b))
         .slice(0, 4);
+      const candidates = selected.length > 0 ? selected : indexers.slice(0, 6);
 
-      const fallbackCandidates = selected.length > 0
-        ? selected
-        : indexers
-            .filter((name) => !this.shouldSkipIndexer(name))
-            .sort((a, b) => this.compareIndexerPriority(a, b))
-            .slice(0, 6);
-
-      if (fallbackCandidates.length === 0) return [];
-
-      const indexersList = selected.join(',');
-      logReq(context, `🐢 Bulk-Search: [${topQueries.join(', ')}] em [${indexersList || fallbackCandidates.join(',')}] (Deadline: ${globalDeadlineMs}ms)`);
-
-      // Tentar bulk search primeiro (endpoint /indexers/search)
-      try {
-        const url = new URL(`${this.baseUrl}/search`);
-        for (const q of topQueries) {
-          url.searchParams.append('q', q);
-        }
-        url.searchParams.set('indexers', indexersList || fallbackCandidates.join(','));
-
-        const response = await request(url.toString(), {
-          signal: AbortSignal.timeout(globalDeadlineMs - 1000),
-          headers: { Accept: 'application/json' },
-        });
-        if (response.statusCode < 400) {
-          const payload = await response.body.json();
-          const normalized = this.normalizeTorrentPayload(payload);
-          if (normalized.length > 0) return normalized;
-        }
-      } catch (err) {
-        logReq(context, `⚠️ Bulk-Search falhou: ${err instanceof Error ? err.message : String(err)}`);
-      }
-
-      // Fallback: buscar por indexer individual
-      logReq(context, `↩️ Fallback por indexer em ${fallbackCandidates.length} providers.`);
-      return await this.fetchSearchResultsFromCandidates(topQueries, fallbackCandidates, context);
+      logReq(context, `↩️ Fallback por indexer: [${topQueries.join(', ')}] em [${candidates.join(',')}] (Deadline: ${globalDeadlineMs}ms)`);
+      return await this.fetchSearchResultsFromCandidates(topQueries, candidates, context);
     };
 
     // Promise.race garante que o deadline global é respeitado
@@ -1225,6 +1298,98 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
       return await Promise.race([doSearch(), deadlineTimer]);
     } finally {
       if (deadlineHandle) clearTimeout(deadlineHandle);
+    }
+  }
+
+  /**
+   * GET /indexers/multi. Devolve undefined quando o endpoint não existe ou
+   * falhou (quem chama cai no fallback por indexer); um array, mesmo vazio,
+   * quando o torrent-indexer respondeu.
+   */
+  private async fetchMultiIndexerSearch(
+    queries: string[],
+    indexers: string[],
+    budgetMs: number,
+    context?: MatchContext,
+  ): Promise<TorrentLike[] | undefined> {
+    // margem para a resposta voltar antes do deadline global do guindex
+    const deadlineMs = Math.max(500, budgetMs - 1000);
+    const url = new URL(`${this.baseUrl}/indexers/multi`);
+    for (const q of queries) {
+      url.searchParams.append('q', q);
+    }
+    url.searchParams.set('indexers', indexers.join(','));
+    url.searchParams.set('deadline_ms', String(deadlineMs));
+
+    logReq(context, `📡 Multi-Search: [${queries.join(', ')}] em [${indexers.join(',')}] (deadline_ms: ${deadlineMs})`);
+
+    try {
+      const response = await request(url.toString(), {
+        signal: AbortSignal.timeout(deadlineMs + 800),
+        headers: { Accept: 'application/json' },
+      });
+      if (response.statusCode === 404 || response.statusCode === 405) {
+        await response.body.dump().catch(() => undefined);
+        const catalog = TorrentIndexerProvider.indexerCatalogCache;
+        if (catalog) catalog.multi = false;
+        logReq(context, `⚠️ torrent-indexer sem /indexers/multi (HTTP ${response.statusCode}).`);
+        return undefined;
+      }
+      if (response.statusCode >= 400) {
+        await response.body.dump().catch(() => undefined);
+        logReq(context, `⚠️ Multi-Search falhou: HTTP ${response.statusCode}`);
+        return undefined;
+      }
+
+      const payload = (await response.body.json()) as Record<string, unknown>;
+      if (!Array.isArray(payload?.results)) {
+        return undefined;
+      }
+      const calls = Array.isArray(payload.calls) ? (payload.calls as MultiCall[]) : [];
+      this.recordMultiCalls(calls);
+
+      const results = this.normalizeTorrentPayload(payload);
+      for (const torrent of results) {
+        // /indexers/* não manda o nome do indexer; o multi diz em found_in
+        const foundIn = torrent.found_in;
+        if (!torrent.indexer && Array.isArray(foundIn) && typeof foundIn[0] === 'string') {
+          torrent.indexer = foundIn[0];
+        }
+      }
+
+      const countState = (state: string) => calls.filter((c) => c.state === state).length;
+      logReq(
+        context,
+        `📡 Multi-Search: ${results.length} torrents (ok=${countState('ok')}, erro=${countState('error')}, ` +
+          `timeout=${countState('timeout')}, pulados=${countState('skipped')}${payload.partial === true ? ', parcial' : ''})`,
+      );
+      return this.rankTorrentsByQuery(results, queries[0] ?? '');
+    } catch (err) {
+      logReq(context, `⚠️ Multi-Search falhou: ${err instanceof Error ? err.message : String(err)}`);
+      return undefined;
+    }
+  }
+
+  /** Alimenta o histórico local (prioridade e cooldown) com o resultado de cada sub-chamada. */
+  private recordMultiCalls(calls: MultiCall[]): void {
+    for (const call of calls) {
+      if (typeof call.indexer !== 'string' || !call.indexer) continue;
+      const slug = this.normalizeIndexerSlug(call.indexer);
+      const durationMs = typeof call.duration_ms === 'number' ? call.duration_ms : 0;
+      if (call.state === 'ok') {
+        this.clearIndexerFailure(slug);
+        // replay do cache não diz nada sobre a velocidade do site
+        if (call.cache !== 'HIT') {
+          this.recordIndexerPerformance(slug, durationMs, call.count ?? 0);
+        }
+      } else if (call.state === 'error') {
+        const status = call.status ?? 0;
+        if (status >= 500 || status === 403 || status === 429) {
+          this.recordIndexerFailure(slug);
+        }
+        this.recordIndexerPerformance(slug, durationMs, 0);
+      }
+      // timeout: a sub-chamada segue rodando no servidor e ainda vai para o cache dele
     }
   }
 
@@ -1288,9 +1453,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
       return [];
     }
 
-    const profile = INDEXER_QUERY_PROFILES[normalizedIndexer];
-    const isImdbQuery = /^tt\d+$/i.test(query.trim());
-    if (isImdbQuery && profile && !profile.supportsImdbQuery) {
+    if (!this.indexerSupportsQuery(normalizedIndexer, query)) {
       return [];
     }
 
