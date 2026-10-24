@@ -1436,7 +1436,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
         return undefined;
       }
       const calls = Array.isArray(payload.calls) ? (payload.calls as MultiCall[]) : [];
-      this.recordMultiCalls(calls);
+      this.recordMultiCalls(calls, deadlineMs);
 
       const results = this.normalizeTorrentPayload(payload);
       for (const torrent of results) {
@@ -1461,7 +1461,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
   }
 
   /** Alimenta o histórico local (prioridade e cooldown) com o resultado de cada sub-chamada. */
-  private recordMultiCalls(calls: MultiCall[]): void {
+  private recordMultiCalls(calls: MultiCall[], deadlineMs: number): void {
     for (const call of calls) {
       if (typeof call.indexer !== 'string' || !call.indexer) continue;
       const slug = this.normalizeIndexerSlug(call.indexer);
@@ -1478,8 +1478,12 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
           this.recordIndexerFailure(slug);
         }
         this.recordIndexerPerformance(slug, durationMs, 0);
+      } else if (call.state === 'timeout') {
+        // A sub-chamada segue rodando no servidor e ainda vai para o cache dele,
+        // mas o site foi lento: entra no histórico com pelo menos o prazo, para
+        // a Fase 3 não o tratar como rápido.
+        this.recordIndexerPerformance(slug, Math.max(durationMs, deadlineMs), 0);
       }
-      // timeout: a sub-chamada segue rodando no servidor e ainda vai para o cache dele
     }
   }
 
@@ -2062,6 +2066,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
         signal: AbortSignal.timeout(5000),
       });
       if (response.statusCode >= 400) {
+        await response.body.dump().catch(() => undefined);
         return undefined;
       }
 
@@ -2122,6 +2127,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
       });
 
       if (response.statusCode >= 400) {
+        await response.body.dump().catch(() => undefined);
         TorrentIndexerProvider.localizedTitleCache.set(normalizedImdb, { ts: Date.now(), titles: [] });
         return [];
       }

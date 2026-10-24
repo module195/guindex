@@ -18,12 +18,14 @@ import type { TorrentInfo, MagnetResponse, UnrestrictResponse } from '../models/
 import type { StreamContext } from '../models/source-model.js';
 
 interface AccountTorrent {
+  id?: string;
   hash?: string;
   status?: string;
 }
 
 interface AccountHashesCacheEntry {
-  hashes: Set<string>;
+  /** hash (minúsculo) → id do torrent baixado na conta ('' se o RD não mandou) */
+  torrents: Map<string, string>;
   expires: number;
 }
 
@@ -54,7 +56,7 @@ export class RealDebridService {
   private static readonly ACCOUNT_TORRENTS_LIMIT = 2500;
   /** Chave = token, para a lista de um usuário nunca vazar para outro */
   private static accountHashesCache = new Map<string, AccountHashesCacheEntry>();
-  private static accountHashesInFlight = new Map<string, Promise<Set<string>>>();
+  private static accountHashesInFlight = new Map<string, Promise<Map<string, string>>>();
   /** Após 401/403 em /torrents, pausa novas chamadas por este período */
   private static readonly ACCOUNT_TORRENTS_DISABLE_MS = (() => {
     const parsed = Number.parseInt(process.env.RD_ACCOUNT_TORRENTS_DISABLE_MS ?? '', 10);
@@ -155,26 +157,26 @@ export class RealDebridService {
       return result;
     }
 
-    const accountHashes = await this.getAccountDownloadedHashes(token);
+    const accountTorrents = await this.getAccountDownloadedTorrents(token);
     for (const hash of hashes) {
       const normalized = hash?.toLowerCase();
-      if (normalized && accountHashes.has(normalized)) {
+      if (normalized && accountTorrents.has(normalized)) {
         result.add(normalized);
       }
     }
     return result;
   }
 
-  private static async getAccountDownloadedHashes(token: string): Promise<Set<string>> {
+  private static async getAccountDownloadedTorrents(token: string): Promise<Map<string, string>> {
     const now = Date.now();
     const cached = this.accountHashesCache.get(token);
     if (cached && cached.expires > now) {
-      return cached.hashes;
+      return cached.torrents;
     }
 
     const disabledUntil = this.accountTorrentsDisabledUntil.get(token);
     if (disabledUntil !== undefined && now < disabledUntil) {
-      return new Set();
+      return new Map();
     }
 
     const inFlight = this.accountHashesInFlight.get(token);
@@ -182,15 +184,15 @@ export class RealDebridService {
       return inFlight;
     }
 
-    const promise = this.fetchAccountDownloadedHashes(token).finally(() => {
+    const promise = this.fetchAccountDownloadedTorrents(token).finally(() => {
       this.accountHashesInFlight.delete(token);
     });
     this.accountHashesInFlight.set(token, promise);
     return promise;
   }
 
-  private static async fetchAccountDownloadedHashes(token: string): Promise<Set<string>> {
-    const hashes = new Set<string>();
+  private static async fetchAccountDownloadedTorrents(token: string): Promise<Map<string, string>> {
+    const torrents = new Map<string, string>();
     try {
       const response = await request(
         `${API_BASE}/torrents?limit=${this.ACCOUNT_TORRENTS_LIMIT}`,
@@ -210,29 +212,39 @@ export class RealDebridService {
           this.accountTorrentsDisabledUntil.set(token, Date.now() + this.ACCOUNT_TORRENTS_DISABLE_MS);
           console.warn(`[RealDebrid] /torrents retornou ${response.statusCode}; pausando verificações por ${this.ACCOUNT_TORRENTS_DISABLE_MS}ms`);
         }
-        return hashes;
+        return torrents;
       } else {
         const payload = (await response.body.json()) as unknown;
         for (const entry of Array.isArray(payload) ? (payload as AccountTorrent[]) : []) {
           if (entry?.status === 'downloaded' && typeof entry.hash === 'string' && entry.hash) {
-            hashes.add(entry.hash.toLowerCase());
+            torrents.set(entry.hash.toLowerCase(), typeof entry.id === 'string' ? entry.id : '');
           }
         }
       }
     } catch {
-      return hashes;
+      return torrents;
     }
 
     this.accountHashesCache.set(token, {
-      hashes,
+      torrents,
       expires: Date.now() + this.ACCOUNT_HASHES_TTL_MS
     });
-    return hashes;
+    return torrents;
   }
 
   // ── Magnet → Direct URL ─────────────────────────────────────────────────
 
   async processMagnetToDirectUrl(magnet: string, context?: StreamContext): Promise<string> {
+    // Stream cacheado = torrent já baixado na conta. Reaproveitar evita uma
+    // entrada nova na conta a cada play.
+    const reused = await this.tryExistingTorrent(magnet, context).catch((error) => {
+      console.warn('[RD] falha ao reaproveitar torrent da conta; adicionando o magnet:', error);
+      return undefined;
+    });
+    if (reused) {
+      return reused;
+    }
+
     const { id: torrentId } = await this.addMagnet(magnet);
 
     const torrentInfo = await this.getTorrentInfo(torrentId);
@@ -267,6 +279,38 @@ export class RealDebridService {
 
     // Still not ready, return placeholder video URL
     return this.createPlaceholderUrl(torrentId);
+  }
+
+  /**
+   * Usa o torrent que já está baixado na conta, quando o arquivo escolhido já
+   * está entre os selecionados. Senão devolve undefined e o fluxo normal segue.
+   */
+  private async tryExistingTorrent(magnet: string, context?: StreamContext): Promise<string | undefined> {
+    const hash = magnet.match(/xt=urn:btih:([a-f0-9]{40})/i)?.[1]?.toLowerCase();
+    if (!hash) {
+      return undefined;
+    }
+    const torrentId = (await RealDebridService.getAccountDownloadedTorrents(this.token)).get(hash);
+    if (!torrentId) {
+      return undefined;
+    }
+
+    const info = await this.getTorrentInfo(torrentId);
+    if (info.status !== 'downloaded' || !info.files || info.files.length === 0) {
+      return undefined;
+    }
+    const file = this.selectBestFile(info.files, context);
+    // O RD devolve um link por arquivo selecionado, na ordem dos ids
+    const selected = info.files.filter((f) => f.selected === 1).sort((a, b) => a.id - b.id);
+    const index = file ? selected.findIndex((f) => f.id === file.id) : -1;
+    const link = index >= 0 && info.links?.length === selected.length ? info.links[index] : undefined;
+    if (!link) {
+      return undefined;
+    }
+
+    console.debug(`[RD] reusing torrent id=${torrentId} file id=${file?.id} path=${file?.path}`);
+    const { download } = await this.unrestrictLink(link);
+    return download;
   }
 
   private async getDirectDownloadUrl(torrentId: string): Promise<string> {
