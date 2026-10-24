@@ -34,7 +34,7 @@ Diferente de outras solucoes que exigem Prowlarr, Jackett ou configuracoes compl
 - **Filmes e Series** — suporte completo, incluindo season packs com selecao inteligente de episodio
 - **Otimizado para BR** — regex especifico para padroes de releases brasileiros (`1ª Temporada`, `DUAL 5.1`, etc.)
 - **Real-Debrid + TorBox** — suporte a ambos os provedores com verificacao de cache
-- **Busca em 2 fases** — cache Meilisearch instantaneo + scraping live quando necessario
+- **Busca em 3 fases** — cache Meilisearch + /indexers/multi em paralelo, e os indexers mais rapidos como ultimo recurso, dentro de um orcamento de tempo por pedido
 - **Resolucao de titulos PT-BR** — converte IMDb ID em titulo localizado via TMDB para melhorar hits em indexers que nao suportam IMDB
 - **Filtro de lixo** — remove amostras, propagandas, arquivos pequenos e resultados de titulos errados automaticamente
 - **Addons externos** — agrega streams de outros addons Stremio que nao suportam debrid
@@ -53,19 +53,22 @@ Stremio/AIOStreams
        ▼
    GuIndex (Vercel/VPS)
        │
-       ├──── Fase 1: /search (Meilisearch cache, <10ms)
+       ├──── Fase 1: /search (Meilisearch cache) — uma chamada por query, em paralelo
+       │         └── junto sai o ping no /indexers/multi (Fase 2)
+       │
+       ├──── Fase 2: /indexers/multi (scraping live, IMDb + titulo PT + original)
        │         │
-       │         ├── Resultados suficientes? (≥10 de ≥2 fontes)
-       │         │     SIM → retorna IMEDIATO + warm cache em background
-       │         │     NAO → vai para Fase 2
-       │         │
-       ├──── Fase 2: /indexers/multi (scraping live, uma chamada, 2-10s)
-       │         │
+       │         ├── cache suficiente (≥2 resultados de ≥2 indexers)?
+       │         │     SIM → espera o multi so por TORRENT_INDEXER_MULTI_GRACE_MS e junta
+       │         │     NAO → espera o multi ate o prazo do pedido e junta
        │         ├── indexers e capacidades vem de /sources?v=2
        │         │     (IMDb so para supports_imdb, texto so para supports_text,
        │         │      healthy:false fica de fora)
-       │         ├── fan-out, cache e dedup feitos no torrent-indexer
-       │         └── sem /indexers/multi → /indexers/{nome} um a um
+       │         └── o que o multi raspa vai para o Meilisearch do torrent-indexer
+       │
+       ├──── Fase 3: /indexers/{nome} nos indexers mais rapidos (historico local)
+       │         └── so se as fases 1 e 2 vieram vazias e ainda ha tempo;
+       │             usa as queries de texto que o multi nao cobriu
        │
        ├──── Filtro de relevancia
        │         ├── Title matching (normalizado, sem acentos)
@@ -91,10 +94,10 @@ Stremio/AIOStreams
    - `{titulo} temporada {n}`
    - `{titulo_pt} S{xx}E{yy}` (titulo localizado)
    - IMDB ID (so para indexers que suportam)
-4. **Busca em 2 fases**:
-   - **Fase 1**: `/search` no Meilisearch (cache) — responde em <10ms se o titulo ja foi buscado antes
-   - **Fase 2**: `/indexers/multi` (scraping live, fan-out no torrent-indexer com `deadline_ms`) — so acionado se a Fase 1 retornou poucos resultados. Se o torrent-indexer nao tiver o endpoint, cai em `/indexers/{nome}` um a um
-   - **Background warming**: Mesmo quando a Fase 1 retorna rapido, os `/indexers` sao consultados em background (fire-and-forget) para manter o cache atualizado
+4. **Busca em 3 fases**, dentro de `TORRENT_INDEXER_REQUEST_BUDGET_MS` (8,5 s desde a chegada do pedido, menos `TORRENT_INDEXER_DEBRID_MARGIN_MS` para o debrid):
+   - **Fase 1 (cache)**: `/search` no Meilisearch, uma chamada por query em paralelo (o `/search` le so o primeiro `q`). Ao mesmo tempo dispara o `/indexers/multi`
+   - **Fase 2 (multi)**: `/indexers/multi` com IMDb + titulo PT + titulo original. Com cache suficiente, espera so uma janela curta; com cache fraco, espera ate o prazo. Os resultados das duas fases sao juntados
+   - **Fase 3 (indexers mais rapidos)**: se nada veio, `/indexers/{nome}` nos indexers mais rapidos pelo historico, com as queries de texto que o multi nao cobriu (ou tambem as do multi, se ele nao respondeu)
 5. **Filtro de relevancia** — `isRelevantTorrent()` descarta resultados com titulo errado, temporada/episodio divergente, ou ano incompativel
 6. **Ranking** — Ordena por qualidade (1080p > 720p), idioma (Dual > PT > EN), e seeds
 7. **Debrid check** — Verifica cache no TorBox/RD para indicar ⚡ ou ⏳
