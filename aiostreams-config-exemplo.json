@@ -116,6 +116,26 @@
     "presets":  [
                     {
                         "type":  "custom",
+                        "instanceId":  "9a3",
+                        "enabled":  true,
+                        "options":  {
+                                        "name":  "GuIndex",
+                                        "manifestUrl":  "https://SEU_DOMINIO/manifest.json?debridProvider=torbox\u0026torboxToken=SEU_TOKEN_AQUI",
+                                        "libraryAddon":  false,
+                                        "formatPassthrough":  false,
+                                        "resultPassthrough":  false,
+                                        "forceToTop":  false,
+                                        "timeout":  9000,
+                                        "resources":  [
+                                                          "stream"
+                                                      ],
+                                        "mediaTypes":  [
+
+                                                       ]
+                                    }
+                    },
+                    {
+                        "type":  "custom",
                         "instanceId":  "885",
                         "enabled":  true,
                         "options":  {
@@ -170,26 +190,6 @@
                                                        ],
                                         "libraryAddon":  false,
                                         "resultPassthrough":  false
-                                    }
-                    },
-                    {
-                        "type":  "custom",
-                        "instanceId":  "9a3",
-                        "enabled":  true,
-                        "options":  {
-                                        "name":  "GuIndex",
-                                        "manifestUrl":  "https://SEU_DOMINIO/manifest.json?debridProvider=torbox\u0026torboxToken=SEU_TOKEN_AQUI",
-                                        "libraryAddon":  false,
-                                        "formatPassthrough":  false,
-                                        "resultPassthrough":  false,
-                                        "forceToTop":  false,
-                                        "timeout":  10000,
-                                        "resources":  [
-                                                          "stream"
-                                                      ],
-                                        "mediaTypes":  [
-
-                                                       ]
                                     }
                     },
                     {

@@ -11,6 +11,30 @@ import { StreamService } from '../services/stream-service.js';
 import { ConfigService } from '../services/config-service.js';
 import { TorboxService } from '../services/torbox-service.js';
 
+const parsePositiveInt = (value: string | undefined, fallback: number): number => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
+};
+
+// Mesmo orçamento da busca no torrent-indexer, contado desde a chegada do pedido.
+// A consulta de cache do debrid usa só o que sobrar dele: estourar o timeout do
+// addon no AIOStreams (10 s por padrão) descarta todos os streams do GuIndex.
+const REQUEST_BUDGET_MS = parsePositiveInt(process.env.TORRENT_INDEXER_REQUEST_BUDGET_MS, 8500);
+
+/** Resolve `true` se a promise terminar dentro de `ms`, `false` se o prazo vencer antes. */
+export async function finishesWithin(promise: Promise<unknown>, ms: number): Promise<boolean> {
+  if (ms <= 0) return false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<false>((resolve) => {
+    timer = setTimeout(() => resolve(false), ms);
+  });
+  try {
+    return await Promise.race([promise.then(() => true as const), deadline]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 export class StreamController {
   private config = ConfigService.loadConfig();
   private readonly resolveBaseUrl = this.config.baseUrl;
@@ -18,6 +42,7 @@ export class StreamController {
 
   async handleStreamRequest(args: StreamRequest): Promise<StreamResponse> {
     const { type, id, extra } = args;
+    const requestStartedAt = Date.now();
 
     try {
       console.info(`[GuIndex] 📥 Processando requisição de stream: ${type}/${id}`);
@@ -62,8 +87,20 @@ export class StreamController {
       console.info(`[GuIndex] 🔄 Preparando ${processableStreams.length} streams brutos para verificação Debrid`);
 
       const availabilityStart = Date.now();
-      await this.ensureDebridAvailability(processableStreams, selectedProvider, selectedToken);
-      console.info(`[GuIndex] ⏱️ Verificação de cache no Debrid levou ${Date.now() - availabilityStart}ms`);
+      const availabilityBudgetMs = requestStartedAt + REQUEST_BUDGET_MS - availabilityStart;
+      // Sem resposta a tempo, os streams seguem como não cacheados; a consulta continua em
+      // segundo plano e enche o cache de disponibilidade para o próximo pedido.
+      const availabilityDone = await finishesWithin(
+        this.ensureDebridAvailability(processableStreams, selectedProvider, selectedToken).catch(() => undefined),
+        availabilityBudgetMs
+      );
+      if (availabilityDone) {
+        console.info(`[GuIndex] ⏱️ Verificação de cache no Debrid levou ${Date.now() - availabilityStart}ms`);
+      } else {
+        console.info(
+          `[GuIndex] ⏰ Verificação de cache no Debrid passou do orçamento (${Math.max(0, availabilityBudgetMs)}ms); streams seguem como não cacheados`
+        );
+      }
 
       if (!selectedToken) {
         console.info(`[GuIndex] ⚠️ Sem token Debrid. Retornando em modo fallback (Magnets diretos)`);
