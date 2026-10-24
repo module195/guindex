@@ -2408,7 +2408,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     const texts = this.collectSearchableTexts(torrent);
     for (const text of texts) {
       if (!text) continue;
-      const yearMatch = text.match(/[\(\[.\s]((?:19[5-9]\d|20[0-9]\d))[\)\].\s]/)
+      const yearMatch = text.match(/[([.\s]((?:19[5-9]\d|20[0-9]\d))[)\].\s]/)
         ?? text.match(/\b((?:19[5-9]\d|20[0-9]\d))\b/);
       if (yearMatch?.[1]) {
         const y = Number(yearMatch[1]);
@@ -2472,7 +2472,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     { regex: /\b(?:temporada|season)\s*(\d{1,3})\b/i, group: 1 },
     { regex: /\btemp\.?\s*(\d{1,3})\b/i, group: 1 },
     { regex: /(\d{1,3})[ªºᵃᵒaAoO]\s*temp\b/i, group: 1 },
-    { regex: /(?:^|[\s._\-\[\(])T(\d{1,2})(?:[\s._\-\]\)]|$)/i, group: 1 },
+    { regex: /(?:^|[\s._\-[(])T(\d{1,2})(?:[\s._\-\])]|$)/i, group: 1 },
     { regex: /\bpack\s+(?:temporada|season|temp\.?)\s*(\d{1,3})\b/i, group: 1 },
     { regex: /\bda\s+(\d{1,3})\s*temporada\b/i, group: 1 },
   ];
@@ -2508,9 +2508,9 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     { regex: /\b(?:cap[ií]tulo|capitulo|cap)\.?\s*(\d{1,3})\b/i, group: 1 },
     { regex: /\bfolge\s*(\d{1,3})\b/i, group: 1 },
     { regex: /#(\d{1,3})\b/, group: 1 },
-    { regex: /(?:^|[\/\\])0*(\d{1,3})\s*[-._\s]+[A-Za-z]/, group: 1 },
-    { regex: /(?:^|[\/\\])0*(\d{1,3})\.(mkv|mp4|avi|m4v|ts)$/i, group: 1 },
-    { regex: /(?:^|[\/\\])\d(\d{2})\s*[-._\s]+[A-Za-z]/, group: 1 },
+    { regex: /(?:^|[/\\])0*(\d{1,3})\s*[-._\s]+[A-Za-z]/, group: 1 },
+    { regex: /(?:^|[/\\])0*(\d{1,3})\.(mkv|mp4|avi|m4v|ts)$/i, group: 1 },
+    { regex: /(?:^|[/\\])\d(\d{2})\s*[-._\s]+[A-Za-z]/, group: 1 },
   ];
 
   private extractSeasonFromTorrent(torrent: TorrentLike): number | undefined {
@@ -3842,7 +3842,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
         if (/systemads\.org|superadsgo\.xyz|superadsgo1\.xyz|systemads\.xyz|seuvideo\.xyz/.test(url)) {
           try {
             const urlObj = new URL(url);
-            let idVal = urlObj.searchParams.get('id');
+            const idVal = urlObj.searchParams.get('id');
             if (idVal) {
               const reversedId = idVal.split('').reverse().join('');
               const decoded = Buffer.from(reversedId, 'base64').toString('utf-8');

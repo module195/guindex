@@ -345,7 +345,7 @@ function extractSourceFromLine(line: string): string | undefined {
 }
 
 function sanitizeSource(value: string): string | undefined {
-  const cleaned = value.trim().replace(/^[\[\(]+|[\]\)]+$/g, '');
+  const cleaned = value.trim().replace(/^[[(]+|[\])]+$/g, '');
   return cleaned || undefined;
 }
 
@@ -430,7 +430,7 @@ function pickSeeders(existing: number | undefined, lines: string[]): number | un
   }
 
   const combined = lines.join(' ');
-  const seedMatch = combined.match(/(?:seeders?|seeds?)\s*[:\-]?\s*(\d{1,7})/i);
+  const seedMatch = combined.match(/(?:seeders?|seeds?)\s*[:-]?\s*(\d{1,7})/i);
   if (seedMatch?.[1]) {
     return Number(seedMatch[1]);
   }
