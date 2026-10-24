@@ -246,8 +246,11 @@ const MULTI_GRACE_MS = parseNonNegativeInt(process.env.TORRENT_INDEXER_MULTI_GRA
 const PHASE3_MIN_MS = parsePositiveInt(process.env.TORRENT_INDEXER_PHASE3_MIN_MS, 1500);
 const PHASE3_MAX_QUERIES = parsePositiveInt(process.env.TORRENT_INDEXER_PHASE3_MAX_QUERIES, 3);
 const IMDB_QUERY_REGEX = /^tt\d+$/i;
-const EPISODIC_HINT_REGEX =
-  /(S[0-9]{1,3}(E[0-9]{1,3})?|S[0-9]{1,3}[._ -]?(19|20)[0-9]{2}|[0-9]+[x×][0-9]+|temporadas?|season|seasons|temp\.?\s*\d|epis[oó]dios?|epis[oó]dio|episode|episodes|serie|série|séries|series|minissérie|mini[\s-]?s[eé]rie|ep\.?\s*[0-9]+|cap[ií]tulo|capitulo|cap\.?\s*[0-9]+|completa|completo|complete|collection|cole[çc][aã]o|box\s*set|pack|integral|[0-9]+[ªºa]\s*temp)/i;
+// Sinais fortes de série, com fronteira de palavra. Fica de fora o que aparece em
+// nome de filme: "DTS5.1", "1920x1080", "Filme Completo", "Pack", "Collection",
+// "Episódio IV", "A Série Divergente".
+const STRONG_EPISODE_REGEX =
+  /\b(?:S\d{1,2}\s?E\d{1,3}|S\d{1,2}\b(?!\.\d)|\d{1,2}x\d{1,3}(?![\dp])|temporadas?\b|seasons?\b|epis[oó]dios?\s*\d|episodes?\s*\d|cap[ií]tulos?\s*\d|mini[\s-]?s+[eé]ries?|s[eé]rie\s+completa|complete\s+series|\d{1,2}[ªºa]\s*temp)/i;
 
 const LANGUAGE_FLAG_MAP: Record<string, string> = {
   portugues: '🇧🇷',
@@ -2506,6 +2509,12 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
       }
 
       if (parsed.episode !== undefined) {
+        // Faixa ou lista no nome do release ("S02E01-E05", "Episódios 06 ao 13")
+        // decide sozinha; sem ela, vale o primeiro episódio achado nos textos.
+        const titleEpisodes = this.extractEpisodeSetFromTitles(torrent);
+        if (titleEpisodes) {
+          return titleEpisodes.has(parsed.episode);
+        }
         const torrentEpisode = this.extractEpisodeFromTorrent(torrent);
         if (torrentEpisode !== undefined && torrentEpisode !== parsed.episode) {
           return false;
@@ -2520,51 +2529,68 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     return true;
   }
 
-  private hasEpisodePattern(torrent: TorrentLike): boolean {
-    if (
-      this.extractSeasonFromTorrent(torrent) !== undefined ||
-      this.extractEpisodeFromTorrent(torrent) !== undefined ||
-      (this.extractEpisodeList(torrent)?.length ?? 0) > 0
-    ) {
-      return true;
-    }
-
-    const metadataStrings = this.collectEpisodeMetadataStrings(torrent);
-    return metadataStrings.some((value) => EPISODIC_HINT_REGEX.test(value));
-  }
-
-  private collectEpisodeMetadataStrings(torrent: TorrentLike): string[] {
+  /**
+   * Episódios que o nome do release cobre: "S02E01-E05", "S02E01-05", "S02E01 ao E05",
+   * "S02E01E02E03", "Episódios 06 ao 13", "Episódio 03 e 04", ou um só ("S02E03", "2x03").
+   * Lê o texto cru, antes de "-" virar espaço. Sem episódio no nome (pack de temporada),
+   * devolve undefined.
+   */
+  private extractEpisodeSetFromTitles(torrent: TorrentLike): Set<number> | undefined {
     const record = torrent as Record<string, unknown>;
-    const strings: string[] = [];
+    const titles = [record.title, record.original_title, record.name, record.filename, record.release]
+      .filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
 
-    const pushValue = (value: unknown) => {
-      if (typeof value !== 'string') {
-        return;
-      }
-
-      const normalized = this.normalizeEpisodeMetadata(value);
-      if (normalized) {
-        strings.push(normalized);
+    const episodes = new Set<number>();
+    const addRange = (start: number, end: number) => {
+      if (start > 0 && end >= start && end - start <= 60) {
+        for (let i = start; i <= end; i++) episodes.add(i);
       }
     };
 
-    pushValue(record.title);
-    pushValue(record.original_title);
-    pushValue(record.description);
-    pushValue(record.summary);
-    pushValue(record.plot);
-    pushValue(record.synopsis);
-    pushValue(record.details);
-    pushValue(record.slug);
-    pushValue(record.category);
-    pushValue(record.subcategory);
+    for (const raw of titles) {
+      const text = raw.replace(/[._]/g, ' ');
+      for (const m of text.matchAll(/S\d{1,2}\s?E(\d{1,3})\s*(?:-|a|ao|à|até)\s*E?(\d{1,3})\b/gi)) {
+        addRange(Number(m[1]), Number(m[2]));
+      }
+      for (const m of text.matchAll(/S\d{1,2}((?:E\d{1,3}){2,})/gi)) {
+        for (const ep of m[1]?.match(/\d{1,3}/g) ?? []) episodes.add(Number(ep));
+      }
+      const spaced = text.replace(/-/g, ' - ');
+      for (const m of spaced.matchAll(/\bep(?:is[oó]dios?|s?)\s*(\d{1,3})\s*(-|a|ao|à|até|e)\s*(\d{1,3})\b/gi)) {
+        if (m[2]?.toLowerCase() === 'e') {
+          episodes.add(Number(m[1]));
+          episodes.add(Number(m[3]));
+        } else {
+          addRange(Number(m[1]), Number(m[3]));
+        }
+      }
+    }
+    if (episodes.size > 0) return episodes;
 
-    const tags = (record.tags as unknown) || (record.categories as unknown);
-    if (Array.isArray(tags)) {
-      tags.forEach(pushValue);
+    for (const raw of titles) {
+      const text = raw.replace(/[._]/g, ' ');
+      const single = /S\d{1,2}\s?E(\d{1,3})\b|\b\d{1,2}x(\d{1,3})\b|\bep(?:is[oó]dio|\.)?\s*(\d{1,3})\b/i.exec(text);
+      const value = single ? Number(single[1] ?? single[2] ?? single[3]) : NaN;
+      if (value > 0) return new Set([value]);
+    }
+    return undefined;
+  }
+
+  /**
+   * Para filmes: o torrent parece de série? Só olha campos estruturados e os títulos
+   * do release; descrição, detalhes e slug citam "temporada", "coleção" e
+   * "episódio" em sinopses de filme.
+   */
+  private hasEpisodePattern(torrent: TorrentLike): boolean {
+    if (this.extractSeason(torrent) !== undefined || this.extractEpisode(torrent) !== undefined) {
+      return true;
     }
 
-    return strings;
+    const record = torrent as Record<string, unknown>;
+    return [record.title, record.original_title]
+      .filter((value): value is string => typeof value === 'string')
+      .map((value) => this.normalizeEpisodeMetadata(value))
+      .some((value) => value !== undefined && STRONG_EPISODE_REGEX.test(value));
   }
 
   private normalizeEpisodeMetadata(value: string): string | undefined {
@@ -3599,7 +3625,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
       if (fileSeason !== undefined || fileEpisode !== undefined) {
         score -= 20;
       }
-      if (EPISODIC_HINT_REGEX.test(file.path)) {
+      if (STRONG_EPISODE_REGEX.test(file.path)) {
         score -= 12;
       }
     } else if (context.parsed.season !== undefined) {

@@ -38,6 +38,7 @@ export interface TorboxDirectResult {
 export class TorboxService {
   private static readonly INSTANT_AVAILABILITY_TTL_MS = 5 * 60 * 1000; // 5 min
   private static availabilityCache = new Map<string, AvailabilityCacheEntry>();
+  private static readonly CHECK_CACHED_CHUNK = 90;
 
   private client: TorboxClient;
   private waitVideoUrl?: string;
@@ -72,11 +73,21 @@ export class TorboxService {
 
     if (toFetch.length === 0) return result;
 
+    // O checkcached aceita cerca de 100 hashes por consulta; o guindex junta até 240.
     const client = new TorboxClient({ token });
-    try {
-      const payload = await client.checkTorrentsCached(toFetch, true);
+    const chunks: string[][] = [];
+    for (let i = 0; i < toFetch.length; i += TorboxService.CHECK_CACHED_CHUNK) {
+      chunks.push(toFetch.slice(i, i + TorboxService.CHECK_CACHED_CHUNK));
+    }
+    const settled = await Promise.allSettled(chunks.map((chunk) => client.checkTorrentsCached(chunk, true)));
+    settled.forEach((outcome, index) => {
+      const chunk = chunks[index] ?? [];
+      if (outcome.status === 'rejected') {
+        console.warn(`[TorBox] checkcached falhou (${chunk.length} hashes):`, outcome.reason);
+        return;
+      }
       const cachedSet = new Set<string>();
-      for (const item of payload) {
+      for (const item of outcome.value ?? []) {
         const h = (item.hash ?? '').toLowerCase();
         const hasFiles = !!item.files && item.files.length > 0;
         const flaggedCached = (item as any).cached === true;
@@ -84,11 +95,9 @@ export class TorboxService {
           cachedSet.add(h);
         }
       }
-      this.updateAvailabilityCache(toFetch, cachedSet, now);
+      this.updateAvailabilityCache(chunk, cachedSet, now);
       cachedSet.forEach((h) => result.add(h));
-    } catch {
-      // ignore failures, return what we have
-    }
+    });
 
     return result;
   }
@@ -118,7 +127,9 @@ export class TorboxService {
         });
         const ready = this.isReady(info);
         const file = this.selectBestFile(info.files || [], context);
-        const fileId = file?.id ?? file?.id === 0 ? file.id : undefined;
+        const fileId = typeof file?.id === 'number' ? file.id : undefined;
+        // Episódio escolhido num pack: outro arquivo seria outro episódio
+        const strictFile = fileId !== undefined && context?.episode !== undefined;
 
         console.debug('[TorBox] selected file', {
           fileId,
@@ -133,6 +144,7 @@ export class TorboxService {
               this.client.requestDownloadLink({ torrentId: torrent_id, fileId })
             );
             if (link) return link;
+            if (strictFile) return undefined;
           }
           // 2) without fileId
           const linkNoId = await this.safeCall(() =>
