@@ -100,7 +100,7 @@ Stremio/AIOStreams
    - **Fase 3 (indexers mais rapidos)**: se nada veio, `/indexers/{nome}` nos indexers mais rapidos pelo historico, com as queries de texto que o multi nao cobriu (ou tambem as do multi, se ele nao respondeu)
 5. **Filtro de relevancia** — `isRelevantTorrent()` descarta resultados com titulo errado, temporada/episodio divergente, ou ano incompativel
 6. **Ranking** — Ordena por qualidade (1080p > 720p), idioma (Dual > PT > EN), e seeds
-7. **Debrid check** — Verifica cache no TorBox/RD para indicar ⚡ ou ⏳
+7. **Debrid check** — Verifica cache no TorBox/RD para indicar ⚡ ou ⏳. Usa so o que sobrou do orcamento de 8,5 s; se a resposta do debrid nao chegar a tempo, os streams saem como nao cacheados e o resultado da consulta fica no cache para o proximo pedido
 8. **Resposta** — Retorna `SourceStream[]` formatados com titulo, qualidade, idioma e badges
 
 ### Mapa de indexers
@@ -468,6 +468,13 @@ https://seu-dominio.com/torbox/SEU_TOKEN/manifest.json
 O GuIndex e compativel com o [AIOStreams](https://github.com/Viren070/AIOStreams). Adicione como addon customizado usando a URL do manifest.
 
 O arquivo `aiostreams-config-exemplo.json` contem uma configuracao de referencia para usuarios brasileiros com TorBox, incluindo addons BR populares, formatacao customizada com emojis, filtros de qualidade e ordenacao otimizada.
+
+Ajustes que fazem diferenca no AIOStreams:
+
+- **GuIndex no topo da lista de addons.** Quando dois addons trazem o mesmo torrent, o deduplicador fica com o do addon que vem antes. Com o GuIndex embaixo, expressoes como `addon(streams, 'GuIndex')` e o preload deixam de achar os streams dele.
+- **Timeout de 9000 ms.** O GuIndex responde dentro de `TORRENT_INDEXER_REQUEST_BUDGET_MS` (8,5 s), contando a consulta de cache do debrid; o resto fica para o AIOStreams filtrar e ordenar antes dos ~10 s do Stremio.
+- **Indexer com `keyword`, nao `indexer()`.** O GuIndex envia em `behaviorHints.indexer` o nome do indexer no torrent-indexer (`betor`, `comando_torrents`, `rede_torrent`, `torrent-dos-filmes`, `bludv_ru`, `baixarapido`, `torrentfilmeshds`). `indexer()` compara o texto exato; `keyword(streams, 'indexer', 'bludv', 'comando', ...)` ignora maiusculas e aceita `bludv_ru` e `comando_torrents`.
+- **Fora do Service Wrap.** O GuIndex ja consulta o cache do TorBox/Real-Debrid. Com "Reconfigure Service" ligado para todos os addons, o AIOStreams consulta de novo os mesmos hashes; deixe o GuIndex fora da lista de addons do Service Wrap.
 
 ---
 
