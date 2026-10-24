@@ -142,7 +142,7 @@ const parseNonNegativeInt = (value: string | undefined, fallback: number): numbe
 const normalizeIndexerValue = (value: string): string =>
   value
     .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
+    .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .trim()
     .replace(/\s+/g, '_')
@@ -1644,7 +1644,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
   private normalizeLooseText(value: string): string {
     return value
       .normalize('NFD')
-      .replace(/[̀-ͯ]/g, '')
+      .replace(/[\u0300-\u036f]/g, '')
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, ' ')
       .replace(/\s+/g, ' ')
@@ -2658,7 +2658,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
   private normalizeForComparison(value: string): string {
     return value
       .normalize('NFD')
-      .replace(/[̀-ͯ]/g, '')
+      .replace(/[\u0300-\u036f]/g, '')
       .replace(/[^a-z0-9]+/gi, '')
       .toLowerCase();
   }
@@ -3409,7 +3409,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
   private normalizeLanguageKey(language: string): string {
     return language
       .normalize('NFD')
-      .replace(/[̀-ͯ]/g, '')
+      .replace(/[\u0300-\u036f]/g, '')
       .toLowerCase();
   }
 
