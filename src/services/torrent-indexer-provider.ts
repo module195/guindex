@@ -7,7 +7,7 @@ import { BaseSourceProvider, type SourceFetchOptions } from './base-source-provi
 import { RealDebridService } from './realdebrid-service.js';
 import { TorboxService } from './torbox-service.js';
 import type { SourceStream, StreamContext } from '../models/source-model.js';
-import { detectReleaseLanguages, languagesFromAudioValues } from './audio-language.js';
+import { detectReleaseLanguages, languagesFromAudioValues, reconcileAudioWithRelease, stripAudioSuffix } from './audio-language.js';
 
 interface ParsedIdInfo {
   imdbId?: string;
@@ -3401,15 +3401,19 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
       record.language,
       record.lang,
     ]);
-    if (fromAudio.length > 0) {
-      return fromAudio;
-    }
-
-    // Fallback só pelo nome do release. original_title é o título da página ("... Dual Áudio") e vale para
-    // todos os torrents dela, inclusive releases scene só em inglês; sinopse, slug e categoria idem.
+    // Nome do release só (sem original_title): original_title é o título da página ("... Dual Áudio") e vale
+    // para todos os torrents dela, inclusive releases scene só em inglês; sinopse, slug e categoria idem.
     const releaseText = [record.title, record.name, record.filename, record.release, record.file]
       .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+      .map(stripAudioSuffix)
       .join(' ');
+
+    // audio[] vence, mas é conferido com o nome: a fonte às vezes marca Português num release legendado.
+    if (fromAudio.length > 0) {
+      return reconcileAudioWithRelease(fromAudio, releaseText);
+    }
+
+    // Fallback só pelo nome do release.
     return detectReleaseLanguages(releaseText);
   }
 
@@ -3898,10 +3902,11 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
       return Math.round(numOnly);
     }
 
-    const match = trimmed.match(/([\d.]+)\s*(TB|GB|MB|KB|B)/i);
+    const match = trimmed.match(/(\d+(?:[.,]\d+)?)\s*(TB|GB|MB|KB|B)/i);
     if (!match || !match[1] || !match[2]) return undefined;
 
-    const num = parseFloat(match[1]);
+    // Sites BR escrevem "1,5 GB".
+    const num = parseFloat(match[1].replace(',', '.'));
     if (isNaN(num)) return undefined;
 
     const unit = match[2].toUpperCase();
