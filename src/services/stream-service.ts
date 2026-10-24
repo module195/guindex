@@ -153,13 +153,17 @@ export class StreamService {
     const flagString = langFlags ? ` ${langFlags}` : '';
     const baseName = sourceStream.name || `[GuIndex] ${displayTitle}`;
     const providerName = 'GuIndex';
+    // Sem token a URL é o magnet (P2P): o rótulo [RD]/[TB] faria o parser do AIOStreams
+    // tratar o stream como debrid.
+    const viaDebrid = options?.viaDebrid ?? !url.startsWith('magnet:');
+    const labelPrefix = viaDebrid ? `[${readyLabel}]` : '';
     
     let displayName = '';
     if (debridProvider === 'torbox') {
-      displayName = `[${readyLabel}]${flagString} ${StreamService.buildTorboxName(sourceStream, displayTitle)}`;
+      displayName = `${labelPrefix}${flagString} ${StreamService.buildTorboxName(sourceStream, displayTitle)}`.trim();
     } else {
       const qualityStr = sourceStream.quality || 'Unknown';
-      displayName = `[${readyLabel}] ${providerName}${flagString}\n${qualityStr}`;
+      displayName = `${labelPrefix ? `${labelPrefix} ` : ''}${providerName}${flagString}\n${qualityStr}`;
     }
 
     // Build rich description
@@ -195,7 +199,9 @@ export class StreamService {
     }
 
     const infoHash = StreamService.extractInfoHash(sourceStream);
-    if (infoHash && !url.startsWith('http')) {
+    // Também no link de resolve do debrid: o AIOStreams deduplica por hash:fileIdx e o
+    // Reconfigure Service só atua em streams debrid com infoHash.
+    if (infoHash) {
       metadata.infoHash = infoHash;
     }
     if (sourceStream.size != undefined) {
@@ -263,7 +269,6 @@ export class StreamService {
       behaviorHints.folderSize = sourceStream.folderSize;
     }
     // Sem token a URL é o magnet (P2P): não há serviço de debrid para anunciar.
-    const viaDebrid = options?.viaDebrid ?? !url.startsWith('magnet:');
     if (viaDebrid) {
       behaviorHints.service = debridProvider;
       behaviorHints.cached = isReady;
