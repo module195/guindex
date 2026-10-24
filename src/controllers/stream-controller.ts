@@ -81,7 +81,8 @@ export class StreamController {
               selectedProvider === 'torbox' ? false : !isCached || !selectedToken,
             realDebridReady: selectedProvider === 'realdebrid' ? isCached : undefined,
             torboxReady: selectedProvider === 'torbox' ? isCached : undefined,
-            debridProvider: selectedProvider ?? 'realdebrid'
+            debridProvider: selectedProvider ?? 'realdebrid',
+            viaDebrid: Boolean(selectedToken)
           };
 
           if (!selectedToken) {

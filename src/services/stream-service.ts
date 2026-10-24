@@ -5,6 +5,7 @@
 import type { DebridProvider } from '../models/debrid-model.js';
 import type { SourceStream, StreamContext } from '../models/source-model.js';
 import type { StremioStream, StremioStreamBehaviorHints } from '../models/stream-model.js';
+import { detectReleaseLanguages } from './audio-language.js';
 
 const LANGUAGE_DISPLAY_ALIASES: Record<string, string> = {
   portuguese: 'Portuguese',
@@ -113,6 +114,8 @@ interface StreamMetadataOptions {
   realDebridReady?: boolean;
   torboxReady?: boolean;
   debridProvider?: DebridProvider;
+  /** true quando a URL resolve via debrid (há token); padrão: qualquer URL que não seja magnet */
+  viaDebrid?: boolean;
 }
 
 export class StreamService {
@@ -213,7 +216,6 @@ export class StreamService {
 
     const behaviorHints: StremioStreamBehaviorHints = {};
     const shouldForceNotWebReady = options?.forceNotWebReady ?? true;
-    const hintFileName = displayFileName || sourceStream.fileName;
     if (sourceStream.size != undefined) {
       behaviorHints.videoSize = sourceStream.size;
     }
@@ -239,26 +241,45 @@ export class StreamService {
     if (options?.fallbackMagnet && debridProvider !== 'torbox') {
       behaviorHints.fallbackMagnet = options.fallbackMagnet;
     }
-    if (Object.keys(behaviorHints).length > 0) {
-      metadata.behaviorHints = behaviorHints;
-    }
 
     const sourceLabelMeta = StreamService.pickIndexer(sourceStream, behaviorHints, url);
     if (sourceLabelMeta) metadata.indexer = sourceLabelMeta;
 
-    let decoratedFilename = hintFileName ?? undefined;
-    if (decoratedFilename) {
-      decoratedFilename = StreamService.appendLanguageToFilename(decoratedFilename, normalizedLanguages);
-      decoratedFilename = StreamService.appendMetadataToFilename(decoratedFilename, sourceStream);
-      decoratedFilename = StreamService.appendGroupToFilename(decoratedFilename, sourceLabelMeta);
-      behaviorHints.filename = decoratedFilename;
-      metadata.filename = decoratedFilename;
-      metadata.folderName = StreamService.pickFolderName(decoratedFilename);
+    // O AIOStreams só lê estes campos de behaviorHints; no topo eles ficam invisíveis para seeders()/indexer()/age().
+    if (sourceStream.seeders != undefined) {
+      behaviorHints.seeders = sourceStream.seeders;
+    }
+    if (sourceLabelMeta) {
+      behaviorHints.indexer = sourceLabelMeta;
+    }
+    if (sourceStream.publishDate) {
+      behaviorHints.publishDate = sourceStream.publishDate;
+    }
+    if (sourceStream.folderName) {
+      behaviorHints.folderName = sourceStream.folderName;
+      metadata.folderName = sourceStream.folderName;
+    }
+    if (sourceStream.folderSize != undefined) {
+      behaviorHints.folderSize = sourceStream.folderSize;
+    }
+    // Sem token a URL é o magnet (P2P): não há serviço de debrid para anunciar.
+    const viaDebrid = options?.viaDebrid ?? !url.startsWith('magnet:');
+    if (viaDebrid) {
+      behaviorHints.service = debridProvider;
+      behaviorHints.cached = isReady;
+    }
+
+    // Nome cru: o parser do AIOStreams lê resolução/codec/idioma daqui, e o Stremio usa para legendas.
+    const hintFileName = StreamService.pickHintFileName(sourceStream);
+    if (hintFileName) {
+      behaviorHints.filename = hintFileName;
+      metadata.filename = hintFileName;
     }
     if (sourceLabelMeta) {
       metadata.releaseGroup = StreamService.sanitizeGroup(sourceLabelMeta);
     }
 
+    metadata.behaviorHints = behaviorHints;
     return metadata;
   }
 
@@ -352,77 +373,15 @@ export class StreamService {
   }
 
   private static detectLanguages(stream: SourceStream): string[] {
-    const fromSource = Array.isArray(stream.languages)
-      ? StreamService.normalizeLanguages(stream.languages)
-      : [];
-
-    // Always inspect textual context to complement source-provided tags.
-    // Some providers mark dual audio inconsistently and may return English-only.
-    const contextText = StreamService.buildContextText(stream);
-    const text = `${stream.fileName ?? ''} ${stream.title ?? ''} ${stream.contextString ?? ''} ${stream.description ?? ''} ${stream.name ?? ''} ${contextText}`.toLowerCase();
-    const normalizedText = StreamService.normalizeLanguageKey(text);
-
-    const detected: string[] = [...fromSource];
-    if (/\b(pt[\s\.\-_]?br|brazilian|dublado|dublada|portuguese|portugues|ptbr)\b/.test(normalizedText)) {
-      detected.push('Portuguese');
-    }
-    if (/\b(english|eng|en)\b/.test(normalizedText)) {
-      detected.push('English');
-    }
-    if (/\b(spanish|espanol|latino|castellano|spa|es)\b/.test(normalizedText)) {
-      detected.push('Spanish');
-    }
-    if (/\b(french|frances|fre|fra|fr)\b/.test(normalizedText)) {
-      detected.push('French');
-    }
-    if (/\b(italian|italiano|ita)\b/.test(normalizedText)) {
-      detected.push('Italian');
-    }
-    if (/\b(german|alemao|ger|deu|de)\b/.test(normalizedText)) {
-      detected.push('German');
-    }
-    if (/\b(japanese|japones|jpn|ja)\b/.test(normalizedText)) {
-      detected.push('Japanese');
-    }
-    if (/\b(korean|coreano|kor|ko)\b/.test(normalizedText)) {
-      detected.push('Korean');
-    }
-    if (/\b(chinese|chines|mandarin|mandarim|chi|zho|zh)\b/.test(normalizedText)) {
-      detected.push('Chinese');
-    }
-    if (/\b(russian|russo|rus|ru)\b/.test(normalizedText)) {
-      detected.push('Russian');
-    }
-    if (/\b(hindi|hin|hi)\b/.test(normalizedText)) {
-      detected.push('Hindi');
-    }
-    if (/\b(turkish|turco|tur|tr)\b/.test(normalizedText)) {
-      detected.push('Turkish');
-    }
-    if (/\b(polish|polones|pol|pl)\b/.test(normalizedText)) {
-      detected.push('Polish');
-    }
-    if (/\b(dutch|holandes|nld|nl)\b/.test(normalizedText)) {
-      detected.push('Dutch');
-    }
-    if (/\b(ukrainian|ucraniano|ukr|uk)\b/.test(normalizedText)) {
-      detected.push('Ukrainian');
+    // Idiomas que a fonte já resolveu (audio[] do torrent-indexer) valem sozinhos.
+    const fromSource = StreamService.normalizeLanguages(stream.languages);
+    if (fromSource.length > 0) {
+      return fromSource;
     }
 
-    // Many BR releases tag "Dual Audio" without complete language fields.
-    if (/\bdual\s*audio\b/.test(normalizedText)) {
-      if (!detected.includes('English')) {
-        detected.push('English');
-      }
-      if (
-        !detected.includes('Portuguese') &&
-        /\b(dublado|dublada|nacional|pt[\s.\-_]?br|ptbr|portuguese|portugues)\b/.test(normalizedText)
-      ) {
-        detected.push('Portuguese');
-      }
-    }
-
-    return StreamService.normalizeLanguages(detected);
+    // Fallback: só o nome do release. Sinopse, URL e contexto da busca geravam falsos positivos.
+    const releaseName = `${stream.fileName ?? ''} ${StreamService.pickFirstLine(stream.title) ?? ''}`;
+    return StreamService.normalizeLanguages(detectReleaseLanguages(releaseName));
   }
 
   private static buildLanguageCodes(languages: string[]): string[] {
@@ -453,98 +412,6 @@ export class StreamService {
     return codes;
   }
 
-  private static appendLanguageToFilename(filename: string, languages: string[]): string {
-    if (languages.length === 0) return filename;
-
-    const codes = StreamService.languageCodeTokens(languages);
-    if (codes.length === 0) return filename;
-
-    const upperBase = filename.toUpperCase();
-    const missing = codes.filter((code) => !new RegExp(`\\b${code}\\b`, 'i').test(upperBase));
-    if (missing.length === 0) {
-      return filename;
-    }
-
-    return `${filename} ${missing.join(' ')}`;
-  }
-
-  private static appendMetadataToFilename(filename: string, stream: SourceStream): string {
-    let newName = filename;
-    const contextText = StreamService.buildContextText(stream);
-    const text = `${stream.contextString ?? ''} ${stream.description ?? ''} ${stream.title ?? ''} ${stream.name ?? ''} ${contextText}`;
-    if (!text.trim()) return filename;
-
-    const extra: string[] = [];
-
-    const sizeMatch = text.match(/\b(\d+(?:\.\d+)?\s*[MGT]B)\b/i);
-    if (sizeMatch && sizeMatch[1] && !new RegExp(sizeMatch[1].replace(/\s+/g, '\\s*'), 'i').test(filename)) {
-      extra.push(sizeMatch[1].toUpperCase());
-    }
-
-    const audioMatch = text.match(/\b(5\.1|7\.1|Atmos|TrueHD|DTS-HD|DTS|AC3|E-AC3|AAC)\b/ig);
-    if (audioMatch) {
-      for (const a of audioMatch) {
-        if (!new RegExp(`\\b${a.replace('.', '\\.')}\\b`, 'i').test(filename)) {
-          extra.push(a.toUpperCase());
-        }
-      }
-    }
-
-    const codecMatch = text.match(/\b(HEVC|x265|x264|H\.?264|H\.?265|AV1)\b/ig);
-    if (codecMatch) {
-      for (const c of codecMatch) {
-        if (!new RegExp(`\\b${c.replace('.', '\\.')}\\b`, 'i').test(filename)) {
-          extra.push(c.toUpperCase());
-        }
-      }
-    }
-
-    const resMatch = text.match(/\b(2160p|1080p|720p|4k|480p)\b/ig);
-    if (resMatch) {
-      for (const r of resMatch) {
-        if (!new RegExp(`\\b${r}\\b`, 'i').test(filename)) {
-          extra.push(r.toUpperCase());
-        }
-      }
-    }
-
-    const sm = text.match(/\b(\d{1,2})[ªºa]?\s*(?:temporada|season|temp)\b/i);
-    const em = text.match(/\b(?:epis[oó]dio|ep\.?|episode|cap[ií]tulo)\s*(\d{1,3})\b/i);
-    let seMatch = '';
-    if (sm && sm[1]) seMatch += `S${sm[1].padStart(2, '0')}`;
-    if (em && em[1]) seMatch += `E${em[1].padStart(2, '0')}`;
-    if (seMatch && !new RegExp(`\\b${seMatch}\\b`, 'i').test(filename)) {
-      extra.push(seMatch);
-    }
-
-    if (extra.length > 0) {
-      const unique = Array.from(new Set(extra));
-      newName = `${newName} ${unique.join(' ')}`;
-    }
-
-    return newName;
-  }
-
-  private static buildContextText(stream: SourceStream): string {
-    const context = stream.context;
-    if (!context) {
-      return '';
-    }
-
-    const chunks: string[] = [];
-    if (context.title) chunks.push(context.title);
-    if (context.episodeTitle) chunks.push(context.episodeTitle);
-    if (context.type) chunks.push(context.type);
-    if (typeof context.year === 'number') chunks.push(String(context.year));
-    if (typeof context.season === 'number') chunks.push(`season ${context.season}`);
-    if (typeof context.episode === 'number') chunks.push(`episode ${context.episode}`);
-    if (Array.isArray(context.episodeList) && context.episodeList.length > 0) {
-      chunks.push(context.episodeList.map((value) => String(value)).join(' '));
-    }
-
-    return chunks.join(' ');
-  }
-
   private static extractInfoHash(stream: SourceStream): string | undefined {
     if (typeof stream.infoHash === 'string' && stream.infoHash.trim()) {
       return stream.infoHash.trim().toLowerCase();
@@ -558,26 +425,6 @@ export class StreamService {
     return match[1].trim().toLowerCase();
   }
 
-  private static languageCodeTokens(languages: string[]): string[] {
-    const norm = (v: string) => StreamService.normalizeLanguageKey(v);
-    const codes: string[] = [];
-    for (const lang of languages) {
-      const k = norm(lang);
-      if (['portuguese', 'brazilian', 'pt-br', 'ptbr', 'pt', 'dublado', 'dublada'].includes(k)) codes.push('PTBR');
-      else if (['english', 'eng', 'en'].includes(k)) codes.push('ENG');
-      else if (['spanish', 'espanol', 'español', 'es', 'latino', 'castellano'].includes(k)) codes.push('SPA');
-      else if (['french', 'frances', 'fr'].includes(k)) codes.push('FRE');
-      else if (['italian', 'italiano', 'it'].includes(k)) codes.push('ITA');
-      else if (['german', 'alemao', 'de'].includes(k)) codes.push('GER');
-      else if (['japanese', 'japones', 'jp'].includes(k)) codes.push('JPN');
-      else if (['korean', 'coreano', 'kr', 'ko'].includes(k)) codes.push('KOR');
-      else if (['chinese', 'chines', 'zh', 'mandarin'].includes(k)) codes.push('CHI');
-      else if (['russian', 'russo', 'ru'].includes(k)) codes.push('RUS');
-      else if (['hindi', 'hi'].includes(k)) codes.push('HIN');
-    }
-    return Array.from(new Set(codes));
-  }
-
   private static sanitizeGroup(group?: string): string | undefined {
     if (!group) return undefined;
     const trimmed = group.trim().replace(/^www\./i, '');
@@ -585,25 +432,6 @@ export class StreamService {
     const base = trimmed.split('.')[0] || trimmed;
     const cleaned = base.replace(/[^A-Za-z0-9_-]/g, '');
     return cleaned || undefined;
-  }
-
-  private static appendGroupToFilename(filename: string, group?: string): string {
-    if (!group) return filename;
-    const clean = StreamService.sanitizeGroup(group);
-    if (!clean) return filename;
-    if (filename.toLowerCase().includes(clean.toLowerCase())) return filename;
-    return `${filename} - ${clean}`;
-  }
-
-  private static pickFolderName(filename: string): string | undefined {
-    if (!filename) return undefined;
-    const lastSlash = Math.max(filename.lastIndexOf('/'), filename.lastIndexOf('\\'));
-    const name = lastSlash >= 0 ? filename.slice(lastSlash + 1) : filename;
-    const lastDot = name.lastIndexOf('.');
-    if (lastDot > 0) {
-      return name.slice(0, lastDot);
-    }
-    return name;
   }
 
   private static pickReleaseGroup(value?: string): string | undefined {
@@ -690,6 +518,16 @@ export class StreamService {
       return direct;
     }
     return StreamService.pickFirstLine(stream.title);
+  }
+
+  /** Nome cru para behaviorHints.filename: com extensão, sem idioma/tamanho/indexador anexados. */
+  private static pickHintFileName(stream: SourceStream): string | undefined {
+    const raw = stream.rawFileName?.trim();
+    if (raw) {
+      return raw;
+    }
+    const display = StreamService.pickDisplayFileName(stream);
+    return display ? display.replace(/^.*[\\/]/, '') || undefined : undefined;
   }
 
   private static pickFirstLine(value?: string): string | undefined {

@@ -10,6 +10,14 @@ export interface StremioStreamBehaviorHints {
   bingeGroup?: string;
   filename?: string;
   videoSize?: number;
+  // O AIOStreams só lê estes campos de behaviorHints em addons custom.
+  seeders?: number;
+  indexer?: string;
+  publishDate?: string;
+  folderName?: string;
+  folderSize?: number;
+  service?: 'realdebrid' | 'torbox';
+  cached?: boolean;
 }
 
 export interface StremioStream {
