@@ -17,10 +17,13 @@ import { ConfigService } from './config-service.js';
 import type { TorrentInfo, MagnetResponse, UnrestrictResponse } from '../models/realdebrid-model.js';
 import type { StreamContext } from '../models/source-model.js';
 
-type InstantAvailabilityRecord = Record<string, unknown>;
+interface AccountTorrent {
+  hash?: string;
+  status?: string;
+}
 
-interface InstantAvailabilityCacheEntry {
-  cached: boolean;
+interface AccountHashesCacheEntry {
+  hashes: Set<string>;
   expires: number;
 }
 
@@ -42,20 +45,22 @@ const JUNK_CONTENT_REGEX =
   /\b(sample|trailer|extras?|bonus|featurette|behind.?the.?scenes|credits?|creditos|poster|rarbg|nfo|subs?|propaganda|anuncio|promo|preview|teaser|1xbet|banner|ad[s_]|screener|watermark)\b/i;
 
 export class RealDebridService {
-  private static readonly INSTANT_AVAILABILITY_TTL_MS = 5 * 60 * 1000; // 5 minutes
-  private static instantAvailabilityCache = new Map<string, InstantAvailabilityCacheEntry>();
-  /** Após 401/403 do endpoint instantAvailability, pausa novas chamadas por este período */
-  private static readonly INSTANT_AVAILABILITY_DISABLE_MS = (() => {
-    const parsed = Number.parseInt(process.env.RD_INSTANT_AVAILABILITY_DISABLE_MS ?? '', 10);
+  /**
+   * O Real-Debrid desativou /torrents/instantAvailability em nov/2024 (error_code 37,
+   * "disabled_endpoint") e não há substituto público. O único sinal confiável que resta
+   * é a lista de torrents da própria conta: hash com status "downloaded" toca na hora.
+   */
+  private static readonly ACCOUNT_HASHES_TTL_MS = 2 * 60 * 1000;
+  private static readonly ACCOUNT_TORRENTS_LIMIT = 2500;
+  /** Chave = token, para a lista de um usuário nunca vazar para outro */
+  private static accountHashesCache = new Map<string, AccountHashesCacheEntry>();
+  private static accountHashesInFlight = new Map<string, Promise<Set<string>>>();
+  /** Após 401/403 em /torrents, pausa novas chamadas por este período */
+  private static readonly ACCOUNT_TORRENTS_DISABLE_MS = (() => {
+    const parsed = Number.parseInt(process.env.RD_ACCOUNT_TORRENTS_DISABLE_MS ?? '', 10);
     return Number.isFinite(parsed) && parsed >= 0 ? parsed : 10 * 60 * 1000;
   })();
-  /** Chave = header Authorization (por token), para um token ruim não afetar outros usuários */
-  private static instantAvailabilityDisabledUntil = new Map<string, number>();
-
-  private static isInstantAvailabilityDisabled(headers: Record<string, string>): boolean {
-    const until = this.instantAvailabilityDisabledUntil.get(headers.Authorization ?? '');
-    return until !== undefined && Date.now() < until;
-  }
+  private static accountTorrentsDisabledUntil = new Map<string, number>();
 
   constructor(private token: string) {}
 
@@ -134,199 +139,95 @@ export class RealDebridService {
     return await response.body.json() as UnrestrictResponse;
   }
 
-  // ── Instant Availability (cache check) ──────────────────────────────────
+  // ── Cache check (torrents já baixados na conta) ─────────────────────────
 
+  /**
+   * Devolve os hashes (minúsculos) que já estão baixados na conta RD do token.
+   * Hash fora desse conjunto não é "não cacheado": é desconhecido, porque o RD
+   * não expõe mais o cache global.
+   */
   static async fetchCachedInfoHashes(
     hashes: string[],
     token?: string
   ): Promise<Set<string>> {
     const result = new Set<string>();
-    if (!hashes || hashes.length === 0) {
+    if (!token || !hashes || hashes.length === 0) {
       return result;
     }
 
-    const normalizedHashes = hashes
-      .map((hash) => hash?.toLowerCase())
-      .filter((hash): hash is string => Boolean(hash));
-
-    const now = Date.now();
-    const hashesToFetch: string[] = [];
-
-    for (const hash of normalizedHashes) {
-      const cacheEntry = this.instantAvailabilityCache.get(hash);
-      if (cacheEntry && cacheEntry.expires > now) {
-        if (cacheEntry.cached) {
-          result.add(hash);
-        }
-      } else if (token) {
-        hashesToFetch.push(hash);
+    const accountHashes = await this.getAccountDownloadedHashes(token);
+    for (const hash of hashes) {
+      const normalized = hash?.toLowerCase();
+      if (normalized && accountHashes.has(normalized)) {
+        result.add(normalized);
       }
     }
-
-    if (!token || hashesToFetch.length === 0) {
-      return result;
-    }
-
-    const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
-    if (this.isInstantAvailabilityDisabled(headers)) {
-      return result;
-    }
-    const chunkSize = 50;
-
-    for (let i = 0; i < hashesToFetch.length; i += chunkSize) {
-      if (this.isInstantAvailabilityDisabled(headers)) break;
-      const chunk = hashesToFetch.slice(i, i + chunkSize);
-      const upperChunk = chunk.map((hash) => hash.toUpperCase());
-      let chunkPayload = await this.fetchInstantAvailabilityPayload(
-        `${API_BASE}/torrents/instantAvailability/${upperChunk.join('/')}`,
-        headers
-      );
-
-      if ((!chunkPayload || this.isPayloadEmpty(chunkPayload)) && !this.isInstantAvailabilityDisabled(headers)) {
-        chunkPayload = await this.fetchInstantAvailabilityPayload(
-          `${API_BASE}/torrents/instantAvailability/${upperChunk.join(',')}`,
-          headers
-        );
-      }
-
-      if (chunkPayload && !this.isPayloadEmpty(chunkPayload)) {
-        const chunkCached = new Set<string>();
-        this.collectCachedHashesFromPayload(chunkPayload, chunkCached);
-        for (const hash of chunkCached) {
-          result.add(hash);
-        }
-        this.updateAvailabilityCache(chunk, chunkCached, now);
-        continue;
-      }
-
-      if (this.isInstantAvailabilityDisabled(headers)) break;
-      await this.fetchPerHash(chunk, headers, result, now);
-    }
-
     return result;
   }
 
-  private static async fetchPerHash(
-    hashes: string[],
-    headers: Record<string, string>,
-    cached: Set<string>,
-    now: number
-  ): Promise<void> {
-    for (const hash of hashes) {
-      if (this.isInstantAvailabilityDisabled(headers)) return;
-      const payload = await this.fetchInstantAvailabilityPayload(
-        `${API_BASE}/torrents/instantAvailability/${hash.toUpperCase()}`,
-        headers
-      );
-
-      const perHashCached = new Set<string>();
-      if (payload && !this.isPayloadEmpty(payload)) {
-        this.collectCachedHashesFromPayload(payload, perHashCached);
-        for (const cachedHash of perHashCached) {
-          cached.add(cachedHash);
-        }
-      }
-
-      this.updateAvailabilityCache([hash], perHashCached, now);
+  private static async getAccountDownloadedHashes(token: string): Promise<Set<string>> {
+    const now = Date.now();
+    const cached = this.accountHashesCache.get(token);
+    if (cached && cached.expires > now) {
+      return cached.hashes;
     }
+
+    const disabledUntil = this.accountTorrentsDisabledUntil.get(token);
+    if (disabledUntil !== undefined && now < disabledUntil) {
+      return new Set();
+    }
+
+    const inFlight = this.accountHashesInFlight.get(token);
+    if (inFlight) {
+      return inFlight;
+    }
+
+    const promise = this.fetchAccountDownloadedHashes(token).finally(() => {
+      this.accountHashesInFlight.delete(token);
+    });
+    this.accountHashesInFlight.set(token, promise);
+    return promise;
   }
 
-  private static async fetchInstantAvailabilityPayload(
-    endpoint: string,
-    headers: Record<string, string>
-  ): Promise<InstantAvailabilityRecord | undefined> {
+  private static async fetchAccountDownloadedHashes(token: string): Promise<Set<string>> {
+    const hashes = new Set<string>();
     try {
-      const response = await request(endpoint, {
-        headers,
-        headersTimeout: REQUEST_TIMEOUT_MS,
-        bodyTimeout: REQUEST_TIMEOUT_MS
-      });
-      if (response.statusCode >= 400) {
+      const response = await request(
+        `${API_BASE}/torrents?limit=${this.ACCOUNT_TORRENTS_LIMIT}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          headersTimeout: REQUEST_TIMEOUT_MS,
+          bodyTimeout: REQUEST_TIMEOUT_MS
+        }
+      );
+
+      // 204 = conta sem torrents
+      if (response.statusCode === 204) {
+        await response.body.dump();
+      } else if (response.statusCode >= 400) {
         await response.body.dump();
         if (response.statusCode === 401 || response.statusCode === 403) {
-          // Token inválido ou endpoint desativado: repetir por hash só gera N chamadas inúteis
-          this.instantAvailabilityDisabledUntil.set(
-            headers.Authorization ?? '',
-            Date.now() + this.INSTANT_AVAILABILITY_DISABLE_MS,
-          );
-          console.warn(`[RealDebrid] instantAvailability retornou ${response.statusCode}; pausando verificações por ${this.INSTANT_AVAILABILITY_DISABLE_MS}ms`);
+          this.accountTorrentsDisabledUntil.set(token, Date.now() + this.ACCOUNT_TORRENTS_DISABLE_MS);
+          console.warn(`[RealDebrid] /torrents retornou ${response.statusCode}; pausando verificações por ${this.ACCOUNT_TORRENTS_DISABLE_MS}ms`);
         }
-        return undefined;
+        return hashes;
+      } else {
+        const payload = (await response.body.json()) as unknown;
+        for (const entry of Array.isArray(payload) ? (payload as AccountTorrent[]) : []) {
+          if (entry?.status === 'downloaded' && typeof entry.hash === 'string' && entry.hash) {
+            hashes.add(entry.hash.toLowerCase());
+          }
+        }
       }
-      const json = (await response.body.json()) as InstantAvailabilityRecord;
-      return json;
     } catch {
-      return undefined;
-    }
-  }
-
-  private static collectCachedHashesFromPayload(
-    payload: InstantAvailabilityRecord,
-    cached: Set<string>
-  ): void {
-    for (const [key, value] of Object.entries(payload)) {
-      try {
-        if (this.isInstantAvailabilityCached(value)) {
-          cached.add(key.toLowerCase());
-        }
-      } catch {
-        // ignore malformed entries
-      }
-    }
-  }
-
-  private static isPayloadEmpty(payload: InstantAvailabilityRecord): boolean {
-    return !payload || Object.keys(payload).length === 0;
-  }
-
-  private static isInstantAvailabilityCached(value: unknown): boolean {
-    if (!value || typeof value !== 'object') {
-      return false;
+      return hashes;
     }
 
-    const record = value as Record<string, unknown>;
-    const keys = ['rd', 'rdp'];
-
-    for (const key of keys) {
-      if (this.hasCachedNested(record[key])) {
-        return true;
-      }
-    }
-
-    return false;
-  }
-
-  private static hasCachedNested(value: unknown): boolean {
-    if (!value) {
-      return false;
-    }
-
-    if (Array.isArray(value)) {
-      return value.length > 0;
-    }
-
-    if (typeof value === 'object') {
-      return Object.values(value as Record<string, unknown>).some((entry) =>
-        this.hasCachedNested(entry)
-      );
-    }
-
-    return false;
-  }
-
-  private static updateAvailabilityCache(
-    hashes: string[],
-    cachedHashes: Set<string>,
-    now: number
-  ): void {
-    const expires = now + this.INSTANT_AVAILABILITY_TTL_MS;
-    for (const hash of hashes) {
-      const normalized = hash.toLowerCase();
-      this.instantAvailabilityCache.set(normalized, {
-        cached: cachedHashes.has(normalized),
-        expires
-      });
-    }
+    this.accountHashesCache.set(token, {
+      hashes,
+      expires: Date.now() + this.ACCOUNT_HASHES_TTL_MS
+    });
+    return hashes;
   }
 
   // ── Magnet → Direct URL ─────────────────────────────────────────────────

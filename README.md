@@ -75,7 +75,7 @@ Stremio/AIOStreams
        │
        ├──── Debrid cache check
        │         ├── TorBox: /api/torrents/checkcached
-       │         └── Real-Debrid: /torrents/instantAvailability
+       │         └── Real-Debrid: torrents já baixados na conta (/torrents)
        │
        └──── Retorna streams formatados para Stremio
 ```
