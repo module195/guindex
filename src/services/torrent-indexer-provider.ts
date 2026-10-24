@@ -7,6 +7,7 @@ import { BaseSourceProvider, type SourceFetchOptions } from './base-source-provi
 import { RealDebridService } from './realdebrid-service.js';
 import { TorboxService } from './torbox-service.js';
 import type { SourceStream, StreamContext } from '../models/source-model.js';
+import { detectReleaseLanguages, languagesFromAudioValues } from './audio-language.js';
 
 interface ParsedIdInfo {
   imdbId?: string;
@@ -141,7 +142,7 @@ const parseNonNegativeInt = (value: string | undefined, fallback: number): numbe
 const normalizeIndexerValue = (value: string): string =>
   value
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[̀-ͯ]/g, '')
     .toLowerCase()
     .trim()
     .replace(/\s+/g, '_')
@@ -289,114 +290,6 @@ const LANGUAGE_FLAG_MAP: Record<string, string> = {
   farsi: '🇮🇷',
   latin: '🇻🇦',
   latim: '🇻🇦',
-};
-
-const LANGUAGE_ALIASES: Record<string, string> = {
-  portuguese: 'Portuguese',
-  portugues: 'Portuguese',
-  'pt-br': 'Portuguese',
-  'pt br': 'Portuguese',
-  ptbr: 'Portuguese',
-  brazilian: 'Portuguese',
-  'brazilian portuguese': 'Portuguese',
-  dublado: 'Portuguese',
-  dublada: 'Portuguese',
-  english: 'English',
-  ingles: 'English',
-  eng: 'English',
-  en: 'English',
-  spanish: 'Spanish',
-  espanhol: 'Spanish',
-  espanol: 'Spanish',
-  spa: 'Spanish',
-  es: 'Spanish',
-  castellano: 'Spanish',
-  latino: 'Spanish',
-  french: 'French',
-  frances: 'French',
-  fre: 'French',
-  fra: 'French',
-  fr: 'French',
-  italian: 'Italian',
-  italiano: 'Italian',
-  ita: 'Italian',
-  it: 'Italian',
-  german: 'German',
-  alemao: 'German',
-  ger: 'German',
-  deu: 'German',
-  de: 'German',
-  japanese: 'Japanese',
-  japones: 'Japanese',
-  jpn: 'Japanese',
-  ja: 'Japanese',
-  korean: 'Korean',
-  coreano: 'Korean',
-  kor: 'Korean',
-  ko: 'Korean',
-  chinese: 'Chinese',
-  chines: 'Chinese',
-  mandarim: 'Chinese',
-  mandarin: 'Chinese',
-  chi: 'Chinese',
-  zho: 'Chinese',
-  zh: 'Chinese',
-  cantonese: 'Cantonese',
-  cantones: 'Cantonese',
-  russian: 'Russian',
-  russo: 'Russian',
-  rus: 'Russian',
-  ru: 'Russian',
-  hindi: 'Hindi',
-  hin: 'Hindi',
-  hi: 'Hindi',
-  arabic: 'Arabic',
-  arabe: 'Arabic',
-  turkish: 'Turkish',
-  turco: 'Turkish',
-  polish: 'Polish',
-  polones: 'Polish',
-  swedish: 'Swedish',
-  sueco: 'Swedish',
-  norwegian: 'Norwegian',
-  noruegues: 'Norwegian',
-  danish: 'Danish',
-  dinamarques: 'Danish',
-  finnish: 'Finnish',
-  finlandes: 'Finnish',
-  czech: 'Czech',
-  tcheco: 'Czech',
-  hungarian: 'Hungarian',
-  hungaro: 'Hungarian',
-  ukrainian: 'Ukrainian',
-  ucraniano: 'Ukrainian',
-  thai: 'Thai',
-  tailandes: 'Thai',
-  vietnamese: 'Vietnamese',
-  vietnamita: 'Vietnamese',
-  dutch: 'Dutch',
-  holandes: 'Dutch',
-  greek: 'Greek',
-  grego: 'Greek',
-  hebrew: 'Hebrew',
-  hebraico: 'Hebrew',
-  romanian: 'Romanian',
-  romeno: 'Romanian',
-  bulgarian: 'Bulgarian',
-  bulgaro: 'Bulgarian',
-  croatian: 'Croatian',
-  croata: 'Croatian',
-  icelandic: 'Icelandic',
-  islandes: 'Icelandic',
-  persian: 'Persian',
-  persa: 'Persian',
-  farsi: 'Persian',
-  latin: 'Latin',
-  latim: 'Latin',
-  nacional: 'Portuguese',
-  'audio nacional': 'Portuguese',
-  dub: 'Portuguese',
-  'audio original': 'English',
 };
 
 interface MatchContext {
@@ -1751,7 +1644,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
   private normalizeLooseText(value: string): string {
     return value
       .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[̀-ͯ]/g, '')
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, ' ')
       .replace(/\s+/g, ' ')
@@ -2765,7 +2658,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
   private normalizeForComparison(value: string): string {
     return value
       .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[̀-ͯ]/g, '')
       .replace(/[^a-z0-9]+/gi, '')
       .toLowerCase();
   }
@@ -2986,6 +2879,27 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     stream.detailUrl = detailUrl;
   }
 
+  // Nome cru com extensão para behaviorHints.filename; fileName acima é só exibição.
+  const releaseName = this.extractReleaseName(torrent, magnet);
+  const rawFileName = selectedFileName ? selectedFileName.replace(/^.*[\\/]/, '') : releaseName;
+  if (rawFileName) {
+    stream.rawFileName = rawFileName;
+  }
+  // Pasta só existe quando o stream é um arquivo dentro do torrent.
+  if (selectedFile) {
+    if (releaseName && releaseName !== rawFileName) {
+      stream.folderName = releaseName;
+    }
+    if (typeof totalSize === 'number' && totalSize > 0) {
+      stream.folderSize = totalSize;
+    }
+  }
+
+  const publishDate = this.extractPublishDate(torrent);
+  if (publishDate) {
+    stream.publishDate = publishDate;
+  }
+
   if (languages.length > 0) {
     stream.languages = languages;
   }
@@ -3116,6 +3030,66 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
 
   return stream;
 }
+
+  /** Nome do release como publicado: dn do magnet, ou o título sem o sufixo de áudio do torrent-indexer. */
+  private extractReleaseName(torrent: TorrentLike, magnet: string): string | undefined {
+    const fromMagnet = this.extractMagnetDisplayName(magnet);
+    if (fromMagnet) {
+      return fromMagnet;
+    }
+    const title = this.extractTitle(torrent)?.trim();
+    return title ? this.stripAudioSuffix(title) : undefined;
+  }
+
+  private extractMagnetDisplayName(magnet: string): string | undefined {
+    const query = magnet.split('?')[1];
+    if (!query) {
+      return undefined;
+    }
+    try {
+      return new URLSearchParams(query).get('dn')?.trim() || undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  // Códigos que o torrent-indexer anexa ao título em appendAudioISO639_2Code: "Nome (brazilian, eng)".
+  private static readonly AUDIO_SUFFIX_CODES = new Set([
+    'brazilian', 'eng', 'spa', 'fra', 'deu', 'ita', 'jpn', 'kor', 'chi', 'yue', 'rus', 'swe', 'srb', 'ukr',
+    'pol', 'tha', 'tur', 'hin', 'hun', 'fas', 'msa', 'nld', 'fin', 'dan', 'nor', 'isl', 'ell', 'ara', 'heb',
+    'vie', 'ind', 'fil', 'ben', 'tam', 'tel', 'guj', 'mar',
+  ]);
+
+  private stripAudioSuffix(title: string): string {
+    // Às vezes o sufixo vem repetido: "Nome (brazilian) (brazilian)".
+    let stripped = title;
+    for (;;) {
+      const match = stripped.match(/\s*\(([^()]*)\)\s*$/);
+      if (!match || match.index === undefined) {
+        return stripped;
+      }
+      const codes = (match[1] ?? '').split(',').map((code) => code.trim()).filter(Boolean);
+      const isAudioSuffix = codes.length > 0 && codes.every((code) => TorrentIndexerProvider.AUDIO_SUFFIX_CODES.has(code));
+      if (!isAudioSuffix) {
+        return stripped;
+      }
+      stripped = stripped.slice(0, match.index).trim();
+    }
+  }
+
+  /** Data de publicação em ISO 8601; ignora datas zero do Go (0001-01-01) e valores inválidos. */
+  private extractPublishDate(torrent: TorrentLike): string | undefined {
+    const record = torrent as Record<string, unknown>;
+    const candidate = record.date ?? record.publishDate ?? record.publish_date ?? record.pubDate;
+    if (typeof candidate !== 'string' || !candidate.trim()) {
+      return undefined;
+    }
+    const time = new Date(candidate).getTime();
+    if (!Number.isFinite(time) || time <= 0) {
+      return undefined;
+    }
+    return new Date(time).toISOString();
+  }
 
   /**
    * Build a proper folder/file path for AIOStreams display.
@@ -3255,83 +3229,29 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
 
   private extractAudioLanguages(torrent: TorrentLike): string[] {
     const record = torrent as Record<string, unknown>;
-    const languages = new Set<string>();
-    let sawDualAudio = false;
 
-    const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-    const addFromText = (text: string) => {
-      const normalized = this.normalizeLanguageKey(text);
-      const tokenized = normalized.replace(/[^a-z0-9]+/g, ' ').trim();
-
-      if (/\bdual\s*audio\b|\bmulti\s*audio\b/.test(tokenized)) {
-        sawDualAudio = true;
-      }
-
-      for (const [alias, canonical] of Object.entries(LANGUAGE_ALIASES)) {
-        const pattern = new RegExp(`\\b${escapeRegex(alias)}\\b`, 'i');
-        if (pattern.test(normalized) || pattern.test(tokenized)) {
-          languages.add(canonical);
-        }
-      }
-    };
-
-    const addLanguage = (value: unknown) => {
-      if (!value) {
-        return;
-      }
-
-      if (Array.isArray(value)) {
-        value.forEach(addLanguage);
-        return;
-      }
-
-      if (typeof value === 'string') {
-        addFromText(value);
-      }
-    };
-
-    addLanguage(record.audio);
-    addLanguage(record.audios);
-    addLanguage(record.audio_tracks);
-    addLanguage(record.audioTracks);
-    addLanguage(record.audio_languages);
-    addLanguage(record.audioLanguages);
-    addLanguage(record.languages);
-    addLanguage(record.language);
-    addLanguage(record.lang);
-    addLanguage(record.title);
-    addLanguage(record.original_title);
-    addLanguage(record.name);
-    addLanguage(record.filename);
-    addLanguage(record.release);
-    addLanguage(record.file);
-    addLanguage(record.displayName);
-    addLanguage(record.description);
-    addLanguage(record.summary);
-    addLanguage(record.plot);
-    addLanguage(record.synopsis);
-    addLanguage(record.details);
-    addLanguage(record.slug);
-    addLanguage(record.category);
-    addLanguage(record.subcategory);
-
-    const tags = record.tags ?? record.categories;
-    if (Array.isArray(tags)) {
-      tags.forEach(addLanguage);
+    // audio[] do torrent-indexer já vem resolvido; sozinho ele basta.
+    const fromAudio = languagesFromAudioValues([
+      record.audio,
+      record.audios,
+      record.audio_tracks,
+      record.audioTracks,
+      record.audio_languages,
+      record.audioLanguages,
+      record.languages,
+      record.language,
+      record.lang,
+    ]);
+    if (fromAudio.length > 0) {
+      return fromAudio;
     }
 
-    if (sawDualAudio) {
-      // In BR indexers, dual-audio is overwhelmingly PT + EN.
-      if (!languages.has('English')) {
-        languages.add('English');
-      }
-      if (!languages.has('Portuguese')) {
-        languages.add('Portuguese');
-      }
-    }
-
-    return Array.from(languages);
+    // Fallback só pelo nome do release. original_title é o título da página ("... Dual Áudio") e vale para
+    // todos os torrents dela, inclusive releases scene só em inglês; sinopse, slug e categoria idem.
+    const releaseText = [record.title, record.name, record.filename, record.release, record.file]
+      .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+      .join(' ');
+    return detectReleaseLanguages(releaseText);
   }
 
   private static readonly MIN_VIDEO_SIZE = 5 * 1024 * 1024; // 5 MB — anything smaller is junk/ads
@@ -3489,7 +3409,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
   private normalizeLanguageKey(language: string): string {
     return language
       .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[̀-ͯ]/g, '')
       .toLowerCase();
   }
 
