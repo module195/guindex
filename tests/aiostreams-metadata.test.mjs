@@ -112,6 +112,34 @@ test('A3: sem dn, usa o título sem o sufixo de áudio do torrent-indexer', () =
   assert.equal(kept.rawFileName, 'Movie (2020) 1080p (Dublado)');
 });
 
+test('A3: dn com carimbo de site perde o prefixo e fica só o nome do release', () => {
+  const stream = mapTorrent({
+    title: 'VisionQuest S01E03 04 1080p WEB-DL DUAL 5 1 (brazilian, eng)',
+    magnet_link: magnet('BAIXARAPIDO.COM-.EPISODIO-03-E-04.WEB-DL.1080P.MKV.5.1.-DUBLADO-DUAL-AUDIO-.VisionQuest.S01E03-04.1080p.WEB-DL.DUAL.5.1'),
+  }, episodeContext);
+  assert.equal(stream.rawFileName, 'VisionQuest.S01E03-04.1080p.WEB-DL.DUAL.5.1');
+
+  const bracketed = mapTorrent({
+    title: 'O Agente Secreto 2025 1080p WEB-DL (brazilian)',
+    magnet_link: magnet('[WWW.SITE.NET] O.Agente.Secreto.2025.1080p.WEB-DL'),
+  });
+  assert.equal(bracketed.rawFileName, 'O.Agente.Secreto.2025.1080p.WEB-DL');
+});
+
+test('A3: dn com carimbo de site sem o título dentro cai para o título', () => {
+  const stream = mapTorrent({
+    title: 'Movie 2020 1080p WEB-DL (brazilian)',
+    magnet_link: magnet('COMANDOTORRENTS.COM-.FILME.1080P.DUBLADO'),
+  });
+  assert.equal(stream.rawFileName, 'Movie 2020 1080p WEB-DL');
+});
+
+test('A3: dn sem carimbo de site não muda, mesmo com grupo no fim', () => {
+  const dn = 'VisionQuest.S01E03-04.WEB-DL.1080p.x264.DUAL.5.1-STARCKFILMES';
+  const stream = mapTorrent({ title: 'VisionQuest S01E03 04 WEB-DL 1080p x264 DUAL 5 1 STARCKFILMES (brazilian, eng)', magnet_link: magnet(dn) }, episodeContext);
+  assert.equal(stream.rawFileName, dn);
+});
+
 test('A3: arquivo dentro de pack usa o basename com extensão; o torrent vira pasta', () => {
   const stream = mapTorrent(
     {

@@ -3279,12 +3279,42 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
 
   /** Nome do release como publicado: dn do magnet, ou o título sem o sufixo de áudio do torrent-indexer. */
   private extractReleaseName(torrent: TorrentLike, magnet: string): string | undefined {
+    const rawTitle = this.extractTitle(torrent)?.trim();
+    const title = rawTitle ? this.stripAudioSuffix(rawTitle) : undefined;
     const fromMagnet = this.extractMagnetDisplayName(magnet);
     if (fromMagnet) {
-      return fromMagnet;
+      return this.stripSitePrefix(fromMagnet, title) ?? title ?? fromMagnet;
     }
-    const title = this.extractTitle(torrent)?.trim();
-    return title ? this.stripAudioSuffix(title) : undefined;
+    return title;
+  }
+
+  // Sites que carimbam o próprio domínio no início do dn: "BAIXARAPIDO.COM-.EPISODIO-01-E-02.WEB-DL...-.Show.S01E01-02.1080p".
+  private static readonly SITE_PREFIX =
+    /^[\s[({]*(?:www\.)?[a-z0-9][a-z0-9-]*\.(?:com|net|org|info|biz|tv|me|cc|to|io|ru|xyz|site|online|top|vip|club|lol|link)(?:\.br)?(?![a-z0-9])/i;
+
+  /**
+   * Corta o carimbo de site do dn, mantendo o nome do release que vem depois dele.
+   * O release começa onde aparece o início do título; sem esse ponto, devolve undefined.
+   */
+  private stripSitePrefix(displayName: string, title: string | undefined): string | undefined {
+    const prefix = displayName.match(TorrentIndexerProvider.SITE_PREFIX);
+    if (!prefix) {
+      return displayName;
+    }
+    const tokens = (title ?? '').split(/[\s._-]+/).filter(Boolean);
+    const anchorTokens = (tokens[0]?.length ?? 0) >= 3 ? tokens.slice(0, 1) : tokens.slice(0, 2);
+    if (anchorTokens.length === 0) {
+      return undefined;
+    }
+    const escaped = anchorTokens.map((token) => token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    const anchor = new RegExp(`(?:^|[^\\p{L}\\p{N}])(${escaped.join('[\\s._-]+')})(?![\\p{L}\\p{N}])`, 'iu');
+    const rest = displayName.slice(prefix[0].length);
+    const match = anchor.exec(rest);
+    if (!match || match.index === undefined) {
+      return undefined;
+    }
+    const start = match.index + match[0].length - (match[1] ?? '').length;
+    return rest.slice(start).trim() || undefined;
   }
 
   private extractMagnetDisplayName(magnet: string): string | undefined {
