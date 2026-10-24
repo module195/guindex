@@ -11,6 +11,7 @@
     "lint": "eslint src --ext .ts",
     "test": "npm run build && node --test tests/*.test.mjs",
     "test:aiostreams": "npm run build && node --test tests/aiostreams-metadata.test.mjs",
+    "test:indexer": "npm run build && node --test tests/indexer-integration.test.mjs",
     "populate:latest": "npx ts-node --esm src/scripts/fetch-latest.ts",
     "populate:tmdb": "npx ts-node --esm src/scripts/populate-tmdb.ts",
     "populate:tmdb:all": "npx ts-node --esm src/scripts/populate-tmdb.ts --all"

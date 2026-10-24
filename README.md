@@ -59,12 +59,13 @@ Stremio/AIOStreams
        │         │     SIM → retorna IMEDIATO + warm cache em background
        │         │     NAO → vai para Fase 2
        │         │
-       ├──── Fase 2: /indexers/{nome} (scraping live, 2-12s)
+       ├──── Fase 2: /indexers/multi (scraping live, uma chamada, 2-10s)
        │         │
-       │         ├── torrent-dos-filmes  (suporta IMDB, 2-3s)
-       │         ├── starck-filmes       (so titulo, 1-2s)
-       │         ├── vaca_torrent        (so titulo, 2-5s)
-       │         └── rede_torrent        (so titulo, 1-3s)
+       │         ├── indexers e capacidades vem de /sources?v=2
+       │         │     (IMDb so para supports_imdb, texto so para supports_text,
+       │         │      healthy:false fica de fora)
+       │         ├── fan-out, cache e dedup feitos no torrent-indexer
+       │         └── sem /indexers/multi → /indexers/{nome} um a um
        │
        ├──── Filtro de relevancia
        │         ├── Title matching (normalizado, sem acentos)
@@ -92,7 +93,7 @@ Stremio/AIOStreams
    - IMDB ID (so para indexers que suportam)
 4. **Busca em 2 fases**:
    - **Fase 1**: `/search` no Meilisearch (cache) — responde em <10ms se o titulo ja foi buscado antes
-   - **Fase 2**: `/indexers/{nome}` (scraping live) — so acionado se a Fase 1 retornou poucos resultados
+   - **Fase 2**: `/indexers/multi` (scraping live, fan-out no torrent-indexer com `deadline_ms`) — so acionado se a Fase 1 retornou poucos resultados. Se o torrent-indexer nao tiver o endpoint, cai em `/indexers/{nome}` um a um
    - **Background warming**: Mesmo quando a Fase 1 retorna rapido, os `/indexers` sao consultados em background (fire-and-forget) para manter o cache atualizado
 5. **Filtro de relevancia** — `isRelevantTorrent()` descarta resultados com titulo errado, temporada/episodio divergente, ou ano incompativel
 6. **Ranking** — Ordena por qualidade (1080p > 720p), idioma (Dual > PT > EN), e seeds
@@ -387,7 +388,7 @@ npm start
 | Variavel | Padrao | Descricao |
 |----------|--------|-----------|
 | `TORRENT_INDEXER_SEARCH_CACHE_TTL_MS` | `120000` | TTL do cache de busca em memoria (2min) |
-| `TORRENT_INDEXER_INDEXERS_CACHE_TTL_MS` | `600000` | TTL do cache da lista de indexers (10min) |
+| `TORRENT_INDEXER_INDEXERS_CACHE_TTL_MS` | `120000` | TTL do cache do `/sources?v=2` (indexers, capacidades e saude; 2min) |
 | `TORRENT_INDEXER_LOCALIZED_TITLE_CACHE_TTL_MS` | `604800000` | TTL do cache TMDB (7 dias) |
 
 #### TMDB (resolucao de titulos PT-BR)
@@ -444,7 +445,7 @@ TORRENT_INDEXER_GLOBAL_QUEUE_DELAY_MS=1500
 
 # Cache
 TORRENT_INDEXER_SEARCH_CACHE_TTL_MS=120000
-TORRENT_INDEXER_INDEXERS_CACHE_TTL_MS=600000
+TORRENT_INDEXER_INDEXERS_CACHE_TTL_MS=120000
 TORRENT_INDEXER_LOCALIZED_TITLE_CACHE_TTL_MS=604800000
 
 # TMDB (essencial para indexers que nao suportam IMDB)
