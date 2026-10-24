@@ -157,6 +157,48 @@ export function detectReleaseLanguages(releaseName: string): string[] {
   return Array.from(found);
 }
 
+// Marcas de áudio em português e de legenda, para conferir o audio[] contra o nome do release.
+const PT_AUDIO_MARKER = /\b(pt ?br|brazilian|portuguese|portugues|dublado|dublada|dub|nacional|(dual|multi)( ?audio)?)\b/;
+const SUBTITLE_MARKER = /\b(legendado|legendada|leg|subbed)\b/;
+const NATIONAL_MARKER = /\bnacional\b/;
+// Sufixo de áudio que o torrent-indexer anexa ao título: "... (brazilian, eng)".
+const AUDIO_SUFFIX = /\s*\([a-z0-9 ,-]+\)\s*$/i;
+
+/** Tira o sufixo de áudio "(brazilian, eng)" do fim de um título do torrent-indexer. */
+export function stripAudioSuffix(title: string): string {
+  return title.replace(AUDIO_SUFFIX, '');
+}
+
+/**
+ * Confere idiomas vindos do audio[] com o nome do release. O audio[] das fontes
+ * às vezes repete o idioma da página inteira: um release "LEGENDADO" ou "ENG"
+ * aparecia como Português. Sem marca de áudio PT no nome, legenda ou outro
+ * idioma nomeado tiram Português; NACIONAL fica só com Português.
+ */
+export function reconcileAudioWithRelease(languages: string[], releaseName: string): string[] {
+  const text = tokenize(stripAudioSuffix(releaseName));
+  if (!text || languages.length === 0) {
+    return languages;
+  }
+
+  const named = detectReleaseLanguages(text).filter((language) => language !== 'Portuguese');
+  if (NATIONAL_MARKER.test(text) && named.length === 0) {
+    return ['Portuguese'];
+  }
+  if (PT_AUDIO_MARKER.test(text) || !languages.includes('Portuguese')) {
+    return languages;
+  }
+  if (!SUBTITLE_MARKER.test(text) && named.length === 0) {
+    return languages;
+  }
+
+  const withoutPt = languages.filter((language) => language !== 'Portuguese');
+  if (withoutPt.length > 0) {
+    return withoutPt;
+  }
+  return named.length > 0 ? named : ['English'];
+}
+
 /** Idiomas de campos estruturados como o audio[] do torrent-indexer; valores desconhecidos são ignorados. */
 export function languagesFromAudioValues(values: unknown): string[] {
   const found = new Set<string>();

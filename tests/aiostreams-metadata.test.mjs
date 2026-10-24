@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { detectReleaseLanguages, languagesFromAudioValues } from '../dist/services/audio-language.js';
+import { detectReleaseLanguages, languagesFromAudioValues, reconcileAudioWithRelease } from '../dist/services/audio-language.js';
 import { StreamService } from '../dist/services/stream-service.js';
 import { TorrentIndexerProvider } from '../dist/services/torrent-indexer-provider.js';
 
@@ -137,6 +137,33 @@ test('A1: date vira publishDate ISO; data zero do Go é ignorada', () => {
   assert.equal(mapTorrent(tropaDeElite).publishDate, '2016-06-29T22:44:46.000Z');
   assert.equal(mapTorrent({ ...tropaDeElite, date: '0001-01-01T00:00:00Z' }).publishDate, undefined);
   assert.equal(mapTorrent({ ...tropaDeElite, date: 'ontem' }).publishDate, undefined);
+});
+
+test('A2: audio[] é conferido com o nome do release', () => {
+  // Legendado ou outro idioma sem marca PT: Português sai.
+  assert.deepEqual(reconcileAudioWithRelease(['Portuguese'], 'Duna Parte 2 2024 1080p LEGENDADO (brazilian)'), ['English']);
+  assert.deepEqual(reconcileAudioWithRelease(['Portuguese', 'English'], 'Movie.2020.1080p.WEB-DL.ENG.x264'), ['English']);
+  assert.deepEqual(reconcileAudioWithRelease(['Portuguese'], 'Movie.2020.1080p.ITA.ENG'), ['English', 'Italian']);
+  // Marca PT no nome mantém o audio[]; o sufixo "(brazilian)" do torrent-indexer não conta como marca.
+  assert.deepEqual(reconcileAudioWithRelease(['Portuguese', 'English'], 'Movie 2020 1080p DUAL 5.1 Legendado'), ['Portuguese', 'English']);
+  assert.deepEqual(reconcileAudioWithRelease(['Portuguese'], 'Movie 2020 1080p WEB-DL'), ['Portuguese']);
+  // NACIONAL fica só com Português.
+  assert.deepEqual(reconcileAudioWithRelease(['Portuguese', 'English'], 'Tropa de Elite 2007 Nacional 1080p'), ['Portuguese']);
+});
+
+test('A2: release legendado com audio[] Português sai sem Português', () => {
+  const stream = mapTorrent({
+    title: 'Duna Parte 2 2024 1080p WEB-DL Legendado (brazilian)',
+    audio: ['Português'],
+    magnet_link: magnet('Duna Parte 2 2024 1080p WEB-DL Legendado'),
+  });
+  assert.deepEqual(stream.languages, ['English']);
+});
+
+test('tamanho com vírgula decimal ("1,5 GB")', () => {
+  const stream = mapTorrent({ ...tropaDeElite, size: '1,5 GB' });
+  assert.equal(stream.size, Math.round(1.5 * GB));
+  assert.equal(mapTorrent({ ...tropaDeElite, size: '711 MB' }).size, 711 * 1024 ** 2);
 });
 
 // --- A1 + A3: behaviorHints ----------------------------------------------------
