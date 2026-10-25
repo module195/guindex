@@ -74,7 +74,9 @@ export class TorboxClient {
   private readonly baseUrl: string;
   private readonly token: string;
   private readonly userAgent: string;
-  private readonly requestTimeout = 4000; // ms
+  // A checagem de cache roda dentro do prazo da busca; o resto é play, e o player espera
+  private readonly cacheCheckTimeout = 4000; // ms
+  private readonly requestTimeout = 15000; // ms
 
   constructor(options: TorboxClientOptions) {
     this.token = options.token;
@@ -90,7 +92,11 @@ export class TorboxClient {
     };
   }
 
-  private async get<T>(path: string, search?: Record<string, string | number | boolean | string[]>): Promise<T> {
+  private async get<T>(
+    path: string,
+    search?: Record<string, string | number | boolean | string[]>,
+    timeout = this.requestTimeout
+  ): Promise<T> {
     const url = new URL(this.baseUrl + path);
     if (search) {
       for (const [key, value] of Object.entries(search)) {
@@ -105,8 +111,8 @@ export class TorboxClient {
 
     const res = await request(url.toString(), {
       headers: this.headers(),
-      headersTimeout: this.requestTimeout,
-      bodyTimeout: this.requestTimeout
+      headersTimeout: timeout,
+      bodyTimeout: timeout
     });
     const bodyText = await res.body.text();
 
@@ -153,11 +159,11 @@ export class TorboxClient {
 
   async checkTorrentsCached(hashes: string[], listFiles = true): Promise<CheckCachedItem[]> {
     if (!hashes.length) return [];
-    return this.get<CheckCachedItem[]>('/v1/api/torrents/checkcached', {
-      hash: hashes,
-      format: 'list',
-      list_files: listFiles
-    });
+    return this.get<CheckCachedItem[]>(
+      '/v1/api/torrents/checkcached',
+      { hash: hashes, format: 'list', list_files: listFiles },
+      this.cacheCheckTimeout
+    );
   }
 
   async createTorrent(magnet: string): Promise<{ torrent_id: number; hash: string }> {
@@ -233,7 +239,11 @@ export class TorboxClient {
 
   async checkWebDlCached(hashes: string[]): Promise<CheckCachedItem[]> {
     if (!hashes.length) return [];
-    return this.get<CheckCachedItem[]>('/v1/api/webdl/checkcached', { hash: hashes, format: 'list' });
+    return this.get<CheckCachedItem[]>(
+      '/v1/api/webdl/checkcached',
+      { hash: hashes, format: 'list' },
+      this.cacheCheckTimeout
+    );
   }
 
   async createWebDl(link: string, name?: string): Promise<{ webdownload_id: number; hash: string }> {
