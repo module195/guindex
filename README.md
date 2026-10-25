@@ -353,6 +353,8 @@ npm start
 | `STREMIO_ADDON_TIMEOUT_MS` | orçamento − margem do debrid (7000) | Prazo do pedido a cada addon externo; passou disso, o addon é cortado e os outros streams seguem |
 | `SOURCE_TIMEOUT_MS` | `TORRENT_INDEXER_REQUEST_BUDGET_MS` (8500) | Prazo de cada fonte no agregador; `0` desliga |
 | `RD_BLOCKED_TTL_MS` | `86400000` (24 h) | Por quanto tempo um arquivo recusado pelo Real-Debrid (infringing_file) fica escondido; `0` desliga |
+| `STREAM_CACHE_TTL_MS` | `120000` (2 min) | Por quanto tempo a resposta do `/stream` sai do cache sem nova busca; `0` desliga o cache |
+| `STREAM_CACHE_STALE_MS` | `1800000` (30 min) | Até quando a resposta antiga ainda é entregue na hora enquanto uma busca nova roda em segundo plano |
 
 #### Torrent Indexer — busca
 
