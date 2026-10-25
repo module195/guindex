@@ -141,6 +141,7 @@ export class StreamController {
           }
 
           const resolveUrl = this.buildResolveUrl({
+            base: this.config.baseUrlIsFallback && extra?.requestBaseUrl ? extra.requestBaseUrl : this.resolveBaseUrl,
             token: selectedToken,
             magnet,
             provider: selectedProvider,
@@ -306,6 +307,7 @@ export class StreamController {
   }
 
   private buildResolveUrl(params: {
+    base: string;
     token: string;
     magnet?: string;
     originalUrl?: string;
@@ -314,9 +316,7 @@ export class StreamController {
     linkType?: 'torrent' | 'webdl';
   }): string {
     const { token, magnet, originalUrl, context, provider, linkType } = params;
-    const base = this.resolveBaseUrl.endsWith('/')
-      ? this.resolveBaseUrl
-      : `${this.resolveBaseUrl}/`;
+    const base = params.base.endsWith('/') ? params.base : `${params.base}/`;
     
     // Novo formato: /provider/token/resolve?magnet=...
     const url = new URL(`${provider}/${token}/resolve`, base);

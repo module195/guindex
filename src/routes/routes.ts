@@ -123,8 +123,9 @@ export function setupRoutes() {
     });
 
     try {
-      const extra: { realdebridToken?: string; torboxToken?: string; debridProvider?: string } = {
-        debridProvider: debridSelection.provider
+      const extra: { realdebridToken?: string; torboxToken?: string; debridProvider?: string; requestBaseUrl?: string } = {
+        debridProvider: debridSelection.provider,
+        requestBaseUrl: ConfigService.requestOrigin(req.headers, req.protocol)
       };
       if (debridSelection.realdebridToken) {
         extra.realdebridToken = debridSelection.realdebridToken;
@@ -162,11 +163,13 @@ export function setupRoutes() {
         debridProvider?: string;
         token?: string;
         forceFresh?: boolean;
+        requestBaseUrl?: string;
       } = {
         debridProvider: debridSelection.provider,
         token: debridSelection.token,
         torboxToken: debridSelection.torboxToken,
-        realdebridToken: debridSelection.realdebridToken
+        realdebridToken: debridSelection.realdebridToken,
+        requestBaseUrl: ConfigService.requestOrigin(req.headers, req.protocol)
       };
 
       if (query?.fresh === '1' || query?.fresh === 'true' || query?.fresh === true) {
@@ -199,11 +202,13 @@ export function setupRoutes() {
         debridProvider?: string;
         token?: string;
         forceFresh?: boolean;
+        requestBaseUrl?: string;
       } = {
         debridProvider: debridSelection.provider,
         token: debridSelection.token,
         torboxToken: debridSelection.torboxToken,
-        realdebridToken: debridSelection.realdebridToken
+        realdebridToken: debridSelection.realdebridToken,
+        requestBaseUrl: ConfigService.requestOrigin(req.headers, req.protocol)
       };
 
       if (query?.fresh === '1' || query?.fresh === 'true' || query?.fresh === true) {
