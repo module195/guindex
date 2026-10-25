@@ -228,15 +228,20 @@ export function languagesFromAudioValues(values: unknown): string[] {
 // NACIONAL e LEGENDADO não estão aqui: ele ignora o primeiro e lê o segundo como áudio em português.
 const AIOSTREAMS_PT_MARKER = /\b(pt ?br|brazilian|portuguese|portugues|dublado|dublada|dual|multi|por)\b/;
 const AIOSTREAMS_SUBS_MARKER = /\b(subs?|subbed)\b/;
+// Marcas de inglês que o parser do AIOStreams reconhece (DUAL/MULTI ele lê como multi-áudio).
+const AIOSTREAMS_EN_MARKER = /\b(eng|english|dual|multi)\b/;
 const VIDEO_EXTENSION = /\.(mkv|mp4|avi|m4v|ts|m2ts|iso)$/i;
 
 /**
  * Marca de idioma para anexar ao behaviorHints.filename, que é onde o AIOStreams
  * lê idioma e legenda de um addon custom:
  * - áudio em português sem marca que ele entenda (NACIONAL, ou só o audio[]): "PT-BR";
+ * - áudio em inglês sem marca no nome (release scene, comum no 4K): "ENG". Sem ela o
+ *   stream sai sem idioma e o requiredLanguages do AIOStreams o descarta;
  * - sem áudio em português e com LEGENDADO no release ou na página: "Subs", que ele
  *   lê como {stream.subbed} sem somar idioma. Qualquer marca com PT-BR/Portuguese/
  *   Brazilian viraria idioma de áudio (🇧🇷) ou engoliria o grupo do release.
+ * As duas últimas podem vir juntas ("ENG Subs").
  * O PT-BR também faz o parser somar Portuguese genérico (🇵🇹) ao Portuguese (Brazil).
  */
 export function filenameLanguageTag(fileName: string, languages: string[], hints: string[] = []): string | undefined {
@@ -244,11 +249,15 @@ export function filenameLanguageTag(fileName: string, languages: string[], hints
   if (languages.includes('Portuguese')) {
     return AIOSTREAMS_PT_MARKER.test(name) ? undefined : 'PT-BR';
   }
-  if (AIOSTREAMS_SUBS_MARKER.test(name)) {
-    return undefined;
+  const tags: string[] = [];
+  if (languages.includes('English') && !AIOSTREAMS_EN_MARKER.test(name)) {
+    tags.push('ENG');
   }
-  const subtitled = [fileName, ...hints].some((text) => SUBTITLE_MARKER.test(tokenize(stripAudioSuffix(text))));
-  return subtitled ? 'Subs' : undefined;
+  if (!AIOSTREAMS_SUBS_MARKER.test(name)) {
+    const subtitled = [fileName, ...hints].some((text) => SUBTITLE_MARKER.test(tokenize(stripAudioSuffix(text))));
+    if (subtitled) tags.push('Subs');
+  }
+  return tags.length > 0 ? tags.join(' ') : undefined;
 }
 
 const LEGENDADO_WORD = /(^|[\s._-])legendad[oa](?=$|[\s._-])/i;
@@ -258,12 +267,13 @@ export function appendFilenameTag(fileName: string, tag: string | undefined): st
   if (!tag) {
     return fileName;
   }
-  // O AIOStreams lê LEGENDADO como áudio em português (bandeira): no lugar dele vai a marca.
-  if (tag === 'Subs' && LEGENDADO_WORD.test(fileName)) {
-    return fileName.replace(LEGENDADO_WORD, `$1${tag}`);
-  }
   const extension = fileName.match(VIDEO_EXTENSION)?.[0] ?? '';
   const base = extension ? fileName.slice(0, -extension.length) : fileName;
   const separator = /\s/.test(base) ? ' ' : '.';
-  return `${base}${separator}${tag}${extension}`;
+  const text = tag.split(' ').join(separator);
+  // O AIOStreams lê LEGENDADO como áudio em português (bandeira): no lugar dele vai a marca.
+  if (tag.split(' ').includes('Subs') && LEGENDADO_WORD.test(fileName)) {
+    return fileName.replace(LEGENDADO_WORD, `$1${text}`);
+  }
+  return `${base}${separator}${text}${extension}`;
 }
