@@ -370,7 +370,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
         ),
       );
     } else {
-      this.watchLateMultiResults(multiPromise, type, id, fallbackTitle, context, seen);
+      this.watchLateMultiResults(multiPromise, type, id, fallbackTitle, context, seen, sourceCounts, streams);
     }
 
     // ═══════════════════════════════════════════════════════
@@ -418,7 +418,9 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
   /**
    * O multi passou da janela e a resposta saiu sem ele. Quando ele terminar, se
    * trouxe stream que a resposta não tinha (o 4K raspado em tempo real, por
-   * exemplo), avisa o cache do /stream para não servir a versão antiga.
+   * exemplo), avisa o cache do /stream para não servir a versão antiga. Conta
+   * como novo só o que entraria na resposta com os mesmos tetos (por fonte e
+   * total): o que o cache já tinha e os tetos cortaram não volta na busca seguinte.
    */
   private watchLateMultiResults(
     multiPromise: Promise<TorrentLike[] | undefined>,
@@ -427,12 +429,20 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     fallbackTitle: string,
     context: MatchContext,
     delivered: Set<string>,
+    sourceCounts: Map<string, number>,
+    deliveredStreams: SourceStream[],
   ): void {
-    const deliveredKeys = new Set(delivered);
     void multiPromise
       .then((late) => {
         if (!late || late.length === 0) return;
-        const fresh = this.collectStreamsFromTorrents(late, fallbackTitle, context, deliveredKeys, new Map(), 150);
+        const fresh = this.collectStreamsFromTorrents(
+          late,
+          fallbackTitle,
+          context,
+          new Set(delivered),
+          new Map(sourceCounts),
+          Math.max(0, 150 - deliveredStreams.length),
+        );
         if (fresh.length === 0) return;
         const has4K = fresh.some((stream) => stream.quality === '4K');
         logReq(
@@ -440,7 +450,8 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
           `🕒 Multi chegou depois da resposta com ${fresh.length} streams novos${has4K ? ' (com 4K)' : ''}; ` +
             'o próximo pedido busca de novo',
         );
-        notifyLateResults(type, id);
+        const hashes = fresh.map((stream) => this.parser.getStreamInfoHash(stream));
+        notifyLateResults(type, id, hashes.every(Boolean) ? (hashes as string[]) : undefined);
       })
       .catch(() => undefined);
   }

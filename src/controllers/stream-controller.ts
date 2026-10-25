@@ -53,7 +53,13 @@ interface StreamCacheEntry {
   staleUntil: number;
   /** Sem a checagem de cache do debrid: nasce velha, e o próximo pedido refaz em segundo plano */
   partial: boolean;
+  /** Hashes que a busca achou (antes dos cortes da resposta) */
+  sourceHashes?: Set<string>;
 }
+
+/** `have` tem todos os hashes de `need`; `null` são hashes desconhecidos. */
+const hasAllHashes = (have: Set<string> | undefined, need: Set<string> | null): boolean =>
+  need !== null && have !== undefined && [...need].every((hash) => have.has(hash));
 
 /** O que monta uma resposta de novo: os streams das fontes e o debrid do pedido. */
 interface ResponseSources {
@@ -69,22 +75,28 @@ export class StreamController {
   private static streamCache = new Map<string, StreamCacheEntry>();
 
   // O multi terminou depois da resposta com streams novos (o 4K que o cache não
-  // tinha, por exemplo): descarta a resposta guardada desse título para que o
-  // próximo pedido, já com o Meilisearch atualizado, busque de novo.
-  // A busca desse título ainda em andamento também não tem os streams novos: a
-  // resposta dela vai para quem pediu, mas não fica guardada.
-  private static readonly stopLateResults = onLateResults((type, id) => {
+  // tinha, por exemplo): descarta a resposta guardada desse título que não os
+  // tem, para que o próximo pedido, já com o Meilisearch atualizado, busque de
+  // novo. A busca desse título ainda em andamento também pode não tê-los: se
+  // não tiver, a resposta dela vai para quem pediu, mas não fica guardada.
+  private static readonly stopLateResults = onLateResults((type, id, hashes) => {
     const prefix = `${type}|${id}|`;
-    for (const key of [...StreamController.streamCache.keys()]) {
-      if (key.startsWith(prefix)) StreamController.streamCache.delete(key);
+    const late = hashes?.length ? new Set(hashes.map((hash) => hash.toLowerCase())) : null;
+    for (const [key, entry] of [...StreamController.streamCache]) {
+      if (key.startsWith(prefix) && !hasAllHashes(entry.sourceHashes, late)) StreamController.streamCache.delete(key);
     }
+    const outdated = StreamController.outdatedRefreshes;
     for (const key of StreamController.streamRefreshInFlight.keys()) {
-      if (key.startsWith(prefix)) StreamController.outdatedRefreshes.add(key);
+      if (!key.startsWith(prefix)) continue;
+      const previous = outdated.get(key);
+      outdated.set(key, late && previous !== null ? new Set([...(previous ?? []), ...late]) : null);
     }
   });
   private static streamRefreshInFlight = new Map<string, Promise<StreamResponse>>();
-  /** Buscas em andamento que o multi atrasado deixou desatualizadas */
-  private static outdatedRefreshes = new Set<string>();
+  /** Buscas em andamento e os hashes que o multi atrasado trouxe depois que elas começaram */
+  private static outdatedRefreshes = new Map<string, Set<string> | null>();
+  /** Hashes que cada busca achou, para comparar com os do multi atrasado */
+  private static sourceHashes = new WeakMap<StreamResponse, Set<string>>();
   /** hash + contexto de cada stream entregue, para reaplicar o filtro de bloqueio do RD no cache */
   private static streamOrigins = new WeakMap<StremioStream, { hash: string; context?: StreamContext }>();
   /** Respostas montadas sem a checagem de cache do debrid completa */
@@ -207,7 +219,9 @@ export class StreamController {
     }
     const pending = this.computeStreams(args)
       .then((response) => {
-        if (StreamController.outdatedRefreshes.delete(key)) {
+        const sourceHashes = StreamController.sourceHashes.get(response);
+        const late = StreamController.outdatedRefreshes.get(key);
+        if (late !== undefined && !hasAllHashes(sourceHashes, late)) {
           console.info(`[GuIndex] ♻️ Multi chegou durante a busca; a resposta não fica no cache: ${args.type}/${args.id}`);
           return response;
         }
@@ -219,7 +233,8 @@ export class StreamController {
           response,
           freshUntil: partial ? now : now + STREAM_CACHE_TTL_MS,
           staleUntil: now + Math.max(STREAM_CACHE_TTL_MS, STREAM_CACHE_STALE_MS),
-          partial
+          partial,
+          sourceHashes
         };
         // Quando a consulta ao debrid terminar, a parcial é remontada com as respostas
         const sources = partial ? StreamController.pendingSources.get(response) : undefined;
@@ -356,7 +371,10 @@ export class StreamController {
         );
       }
       this.applyKnownAvailability(sources);
-      return this.formatResponse(sources);
+      const response = this.formatResponse(sources);
+      const hashes = processableStreams.map((stream) => this.getStreamInfoHash(stream));
+      StreamController.sourceHashes.set(response, new Set(hashes.filter((hash): hash is string => Boolean(hash))));
+      return response;
     } catch (error) {
       console.error(`Stream processing error: ${error instanceof Error ? error.message : 'Unknown error'}`);
       return { streams: [] };

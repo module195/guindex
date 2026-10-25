@@ -211,7 +211,7 @@ test('multi que chega depois da resposta avisa o cache do /stream', async (t) =>
   });
   t.after(srv.close);
   const late = [];
-  const stop = onLateResults((type, id) => late.push(`${type}|${id}`));
+  const stop = onLateResults((type, id, hashes) => late.push([`${type}|${id}`, hashes]));
   t.after(stop);
   const provider = new TorrentIndexerProvider('GuIndex', srv.base);
 
@@ -219,7 +219,38 @@ test('multi que chega depois da resposta avisa o cache do /stream', async (t) =>
   assert.equal(streams.length, 2, 'resposta sai sem o multi');
   assert.deepEqual(late, []);
   await sleep(900);
-  assert.deepEqual(late, [`movie|${IMDB}`]);
+  assert.deepEqual(late, [[`movie|${IMDB}`, [hash('c')]]], 'com os hashes novos');
+});
+
+test('multi atrasado que só repete o que o teto por fonte cortou do cache não avisa', async (t) => {
+  const srv = await startServer({
+    '/sources': async () => [200, SOURCES_V2],
+    '/search': async (url) => [200, {
+      results: url.searchParams.get('q') === IMDB
+        ? [
+            torrent(hash('a'), 'Matrix 1999 1080p', 'betor'),
+            torrent(hash('b'), 'Matrix 1999 1080p WEB', 'betor'),
+            torrent(hash('e'), 'Matrix 1999 720p', 'comando_torrents'),
+            torrent(hash('d'), 'Matrix 1999 1080p BluRay', 'betor'),
+          ]
+        : [],
+    }],
+    '/indexers/multi': async () => {
+      await sleep(1400);
+      return [200, multiPayload([{ ...torrent(hash('d'), 'Matrix 1999 1080p BluRay', 'betor'), found_in: ['betor'] }])];
+    },
+  });
+  t.after(srv.close);
+  const late = [];
+  const stop = onLateResults((type, id) => late.push(`${type}|${id}`));
+  t.after(stop);
+  const provider = new TorrentIndexerProvider('GuIndex', srv.base);
+
+  const streams = await provider.getStreams('movie', IMDB);
+  assert.equal(streams.length, 3, 'o teto por fonte (2 nos testes) corta o terceiro 1080p');
+  assert.ok(!streams.some((s) => s.infoHash === hash('d')));
+  await sleep(900);
+  assert.deepEqual(late, [], 'a busca seguinte também o cortaria');
 });
 
 test('teto por fonte não corta o único 4K da fonte', async (t) => {

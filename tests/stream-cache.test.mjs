@@ -322,3 +322,40 @@ test('busca nova parcial atrás de uma completa ainda válida: a substitui quand
   assert.ok(after.streams[0].title.includes('v2'), after.streams[0].title);
   assert.equal(after.streams[0].behaviorHints.cached, true);
 });
+
+test('multi atrasado com hashes que a busca em andamento já tem: a resposta fica no cache', async () => {
+  const known = '6b'.repeat(20);
+  let calls = 0;
+  SourceService.fetchStreamsFromAllSources = async () => {
+    calls++;
+    if (calls === 1) setTimeout(() => notifyLateResults('movie', 'tt1000020', [known.toUpperCase()]), 10);
+    return [stream(`k${calls}`, known)];
+  };
+  RealDebridService.checkCachedInfoHashes = () => new Promise((resolve) => setTimeout(() => resolve(new Set()), 50));
+  const controller = new StreamController();
+
+  await controller.handleStreamRequest(rdArgs('tt1000020'));
+  const second = await controller.handleStreamRequest(rdArgs('tt1000020'));
+  assert.equal(calls, 1, 'a busca em andamento já tinha o que o multi trouxe');
+  assert.ok(second.streams[0].title.includes('k1'), second.streams[0].title);
+});
+
+test('multi atrasado com hashes que a resposta guardada já tem não a descarta; com hash novo, descarta', async () => {
+  const known = '6c'.repeat(20);
+  let calls = 0;
+  SourceService.fetchStreamsFromAllSources = async () => {
+    calls++;
+    return [stream(`g${calls}`, known)];
+  };
+  RealDebridService.checkCachedInfoHashes = async () => new Set();
+  const controller = new StreamController();
+  await controller.handleStreamRequest(rdArgs('tt1000021'));
+
+  notifyLateResults('movie', 'tt1000021', [known]);
+  await controller.handleStreamRequest(rdArgs('tt1000021'));
+  assert.equal(calls, 1, 'a guardada já tinha o hash');
+
+  notifyLateResults('movie', 'tt1000021', [known, '6d'.repeat(20)]);
+  await controller.handleStreamRequest(rdArgs('tt1000021'));
+  assert.equal(calls, 2, 'hash que a guardada não tem: busca de novo');
+});

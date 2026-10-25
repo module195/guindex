@@ -351,8 +351,9 @@ export function logReq(context: MatchContext | undefined, message: string) {
 }
 
 // Aviso de que o multi terminou depois da resposta e trouxe streams que ela não
-// tinha. Quem guarda a resposta (o cache do /stream) descarta a versão antiga.
-type LateResultsListener = (type: string, id: string) => void;
+// tinha (`hashes`, quando se sabe). Quem guarda a resposta (o cache do /stream)
+// descarta a versão que não os tem.
+type LateResultsListener = (type: string, id: string, hashes?: string[]) => void;
 const lateResultsListeners = new Set<LateResultsListener>();
 
 export function onLateResults(listener: LateResultsListener): () => void {
@@ -360,10 +361,10 @@ export function onLateResults(listener: LateResultsListener): () => void {
   return () => lateResultsListeners.delete(listener);
 }
 
-export function notifyLateResults(type: string, id: string): void {
+export function notifyLateResults(type: string, id: string, hashes?: string[]): void {
   for (const listener of lateResultsListeners) {
     try {
-      listener(type, id);
+      listener(type, id, hashes);
     } catch {
       // um ouvinte com erro não impede os outros
     }
