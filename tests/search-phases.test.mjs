@@ -9,9 +9,13 @@ import http from 'node:http';
 process.env.TORRENT_INDEXER_REQUEST_BUDGET_MS = '3000';
 process.env.TORRENT_INDEXER_DEBRID_MARGIN_MS = '0';
 process.env.TORRENT_INDEXER_MULTI_GRACE_MS = '300';
+process.env.TORRENT_INDEXER_MULTI_GRACE_NO_4K_MS = '1000';
+process.env.TORRENT_INDEXER_COLLECT_PER_SOURCE = '2';
 process.env.TORRENT_INDEXER_PHASE3_MIN_MS = '500';
 
 const { TorrentIndexerProvider } = await import('../dist/services/torrent-indexer-provider.js');
+const { onLateResults } = await import('../dist/services/torrent-indexer-shared.js');
+const { StreamController } = await import('../dist/controllers/stream-controller.js');
 
 const IMDB = 'tt0133093';
 const hash = (c) => c.repeat(40);
@@ -145,7 +149,108 @@ test('Fase 2: com cache suficiente, multi lento não segura a resposta', async (
   const streams = await provider.getStreams('movie', IMDB);
   const elapsed = Date.now() - started;
   assert.equal(streams.length, 2);
-  assert.ok(elapsed < 1200, `respondeu em ${elapsed}ms (janela de 300ms)`);
+  assert.ok(elapsed < 1700, `respondeu em ${elapsed}ms (janela de 1000ms, cache sem 4K)`);
+});
+
+test('Fase 2: cache com 4K usa a janela curta', async (t) => {
+  const srv = await startServer({
+    '/sources': async () => [200, SOURCES_V2],
+    '/search': async (url) => [200, {
+      results: url.searchParams.get('q') === IMDB
+        ? [torrent(hash('a'), 'Matrix 1999 2160p', 'comando_torrents'), torrent(hash('b'), 'Matrix 1999 1080p', 'torrent-dos-filmes')]
+        : [],
+    }],
+    '/indexers/multi': async () => {
+      await sleep(700);
+      return [200, multiPayload([{ ...torrent(hash('c'), 'Matrix 1999 720p'), found_in: ['betor'] }])];
+    },
+  });
+  t.after(srv.close);
+  const provider = new TorrentIndexerProvider('GuIndex', srv.base);
+
+  const started = Date.now();
+  const streams = await provider.getStreams('movie', IMDB);
+  const elapsed = Date.now() - started;
+  assert.equal(streams.length, 2, 'multi de 700ms fica de fora da janela de 300ms');
+  assert.ok(elapsed < 650, `respondeu em ${elapsed}ms`);
+});
+
+test('Fase 2: cache só com 1080p espera mais pelo 4K do multi', async (t) => {
+  const srv = await startServer({
+    '/sources': async () => [200, SOURCES_V2],
+    '/search': async (url) => [200, {
+      results: url.searchParams.get('q') === IMDB
+        ? [torrent(hash('a'), 'Matrix 1999 1080p', 'betor'), torrent(hash('b'), 'Matrix 1999 1080p WEB', 'comando_torrents')]
+        : [],
+    }],
+    '/indexers/multi': async () => {
+      await sleep(700);
+      return [200, multiPayload([{ ...torrent(hash('c'), 'Matrix 1999 2160p', 'betor'), found_in: ['betor'] }])];
+    },
+  });
+  t.after(srv.close);
+  const provider = new TorrentIndexerProvider('GuIndex', srv.base);
+
+  const streams = await provider.getStreams('movie', IMDB);
+  assert.equal(streams.length, 3);
+  assert.ok(streams.some((s) => s.quality === '4K'), 'o 4K do multi chega na resposta');
+});
+
+test('multi que chega depois da resposta avisa o cache do /stream', async (t) => {
+  const srv = await startServer({
+    '/sources': async () => [200, SOURCES_V2],
+    '/search': async (url) => [200, {
+      results: url.searchParams.get('q') === IMDB
+        ? [torrent(hash('a'), 'Matrix 1999 1080p', 'betor'), torrent(hash('b'), 'Matrix 1999 720p', 'comando_torrents')]
+        : [],
+    }],
+    '/indexers/multi': async () => {
+      await sleep(1400);
+      return [200, multiPayload([{ ...torrent(hash('c'), 'Matrix 1999 2160p', 'betor'), found_in: ['betor'] }])];
+    },
+  });
+  t.after(srv.close);
+  const late = [];
+  const stop = onLateResults((type, id) => late.push(`${type}|${id}`));
+  t.after(stop);
+  const provider = new TorrentIndexerProvider('GuIndex', srv.base);
+
+  const streams = await provider.getStreams('movie', IMDB);
+  assert.equal(streams.length, 2, 'resposta sai sem o multi');
+  assert.deepEqual(late, []);
+  await sleep(900);
+  assert.deepEqual(late, [`movie|${IMDB}`]);
+});
+
+test('teto por fonte não corta o único 4K da fonte', async (t) => {
+  const srv = await startServer({
+    '/sources': async () => [200, SOURCES_V2],
+    '/search': async (url) => [200, {
+      results: url.searchParams.get('q') === IMDB
+        ? [
+            torrent(hash('a'), 'Matrix 1999 1080p', 'betor'),
+            torrent(hash('b'), 'Matrix 1999 1080p WEB', 'betor'),
+            torrent(hash('d'), 'Matrix 1999 1080p BluRay', 'betor'),
+            torrent(hash('e'), 'Matrix 1999 2160p', 'betor'),
+          ]
+        : [],
+    }],
+    '/indexers/multi': async () => [200, multiPayload([])],
+  });
+  t.after(srv.close);
+  const provider = new TorrentIndexerProvider('GuIndex', srv.base);
+
+  const streams = await provider.getStreams('movie', IMDB);
+  assert.deepEqual(streams.map((s) => s.quality).sort(), ['1080p', '1080p', '4K']);
+});
+
+test('limite do TorBox guarda o melhor de cada qualidade', () => {
+  const list = [
+    ...Array.from({ length: 5 }, (_, i) => ({ name: `hd${i}`, quality: '1080p' })),
+    { name: 'uhd', quality: '4K' },
+  ];
+  const kept = StreamController.limitKeepingEachQuality(list, 3);
+  assert.deepEqual(kept.map((s) => s.name), ['hd0', 'hd1', 'uhd']);
 });
 
 test('Fase 2: cache vazio espera o multi', async (t) => {

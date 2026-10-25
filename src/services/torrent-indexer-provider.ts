@@ -38,6 +38,8 @@ import {
   MAX_CACHE_QUERIES,
   CACHE_TIMEOUT_MS,
   MULTI_GRACE_MS,
+  MULTI_GRACE_NO_4K_MS,
+  notifyLateResults,
   PHASE3_MIN_MS,
   PHASE3_MAX_QUERIES,
   IMDB_QUERY_REGEX,
@@ -327,31 +329,41 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
       Math.min(CACHE_TIMEOUT_MS, Math.max(500, remainingMs())),
     );
     const cacheSufficient = this.hasSufficientResults(cacheTorrents, fallbackTitle, context);
+    const streams = this.collectStreamsFromTorrents(cacheTorrents, fallbackTitle, context, seen, sourceCounts, 150);
+    const cacheHas4K = streams.some((stream) => stream.quality === '4K');
 
     // ═══════════════════════════════════════════════════════
     // FASE 2 — Multi
-    //   Cache suficiente: espera o multi só por uma janela curta e junta o que
-    //   já voltou (o resto segue no servidor e alimenta o cache). Cache fraco:
-    //   espera o multi até o prazo.
+    //   Cache suficiente: espera o multi só por uma janela curta (mais longa
+    //   quando o cache não tem 4K) e junta o que já voltou; o resto segue no
+    //   servidor e alimenta o cache. Cache fraco: espera o multi até o prazo.
     // ═══════════════════════════════════════════════════════
+    const graceMs = cacheHas4K ? MULTI_GRACE_MS : MULTI_GRACE_NO_4K_MS;
     const multiWaitMs = cacheSufficient && !forceFresh
-      ? Math.min(MULTI_GRACE_MS, Math.max(0, remainingMs()))
+      ? Math.min(graceMs, Math.max(0, remainingMs()))
       : Math.max(0, remainingMs());
     const multiResults = await this.awaitWithin(multiPromise, multiWaitMs, undefined);
     logReq(
       context,
-      `📦 [Fase 1] cache: ${cacheTorrents.length} torrents (${cacheSufficient ? 'suficiente' : 'fraco'}); ` +
+      `📦 [Fase 1] cache: ${cacheTorrents.length} torrents (${cacheSufficient ? 'suficiente' : 'fraco'}` +
+        `${cacheHas4K ? ', com 4K' : ', sem 4K'}); ` +
         `[Fase 2] multi: ${multiResults === undefined ? 'sem resposta no prazo' : `${multiResults.length} torrents`}`,
     );
 
-    const streams = this.collectStreamsFromTorrents(
-      this.parser.mergeTorrentResults(cacheTorrents, multiResults ?? []),
-      fallbackTitle,
-      context,
-      seen,
-      sourceCounts,
-      150,
-    );
+    if (multiResults) {
+      streams.push(
+        ...this.collectStreamsFromTorrents(
+          multiResults,
+          fallbackTitle,
+          context,
+          seen,
+          sourceCounts,
+          Math.max(0, 150 - streams.length),
+        ),
+      );
+    } else {
+      this.watchLateMultiResults(multiPromise, type, id, fallbackTitle, context, seen);
+    }
 
     // ═══════════════════════════════════════════════════════
     // FASE 3 — Indexers com melhor desempenho (como no original)
@@ -391,6 +403,36 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     await this.decorateWithDebrid(streams, options);
     logReq(context, `✅ Retornando ${streams.length} streams para '${id}' em ${Date.now() - startedAt}ms`);
     return streams;
+  }
+
+  /**
+   * O multi passou da janela e a resposta saiu sem ele. Quando ele terminar, se
+   * trouxe stream que a resposta não tinha (o 4K raspado em tempo real, por
+   * exemplo), avisa o cache do /stream para não servir a versão antiga.
+   */
+  private watchLateMultiResults(
+    multiPromise: Promise<TorrentLike[] | undefined>,
+    type: string,
+    id: string,
+    fallbackTitle: string,
+    context: MatchContext,
+    delivered: Set<string>,
+  ): void {
+    const deliveredKeys = new Set(delivered);
+    void multiPromise
+      .then((late) => {
+        if (!late || late.length === 0) return;
+        const fresh = this.collectStreamsFromTorrents(late, fallbackTitle, context, deliveredKeys, new Map(), 150);
+        if (fresh.length === 0) return;
+        const has4K = fresh.some((stream) => stream.quality === '4K');
+        logReq(
+          context,
+          `🕒 Multi chegou depois da resposta com ${fresh.length} streams novos${has4K ? ' (com 4K)' : ''}; ` +
+            'o próximo pedido busca de novo',
+        );
+        notifyLateResults(type, id);
+      })
+      .catch(() => undefined);
   }
 
   /**
@@ -523,6 +565,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     maxStreams: number,
   ): SourceStream[] {
     const streams: SourceStream[] = [];
+    if (maxStreams <= 0) return streams;
 
     for (const torrent of torrents) {
       if (!this.parser.isRelevantTorrent(torrent, context)) continue;
@@ -534,10 +577,15 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
 
       const sourceKey = (stream.source ?? 'unknown').toLowerCase();
       const sourceCount = sourceCounts.get(sourceKey) ?? 0;
-      if (sourceCount >= MAX_COLLECT_PER_SOURCE) continue;
+      // O teto por fonte não corta a primeira ocorrência de cada qualidade: um
+      // dump cheio de 1080p não pode esconder o único 4K da mesma fonte.
+      const qualityKey = `${sourceKey}|${stream.quality ?? 'unknown'}`;
+      const firstOfQuality = !sourceCounts.has(qualityKey);
+      if (sourceCount >= MAX_COLLECT_PER_SOURCE && !firstOfQuality) continue;
 
       streams.push(stream);
       sourceCounts.set(sourceKey, sourceCount + 1);
+      sourceCounts.set(qualityKey, (sourceCounts.get(qualityKey) ?? 0) + 1);
       if (dedupeKey) seen.add(dedupeKey);
 
       if (streams.length >= maxStreams) break;

@@ -10,6 +10,7 @@ import { SourceService } from '../services/source-service.js';
 import { StreamService } from '../services/stream-service.js';
 import { ConfigService } from '../services/config-service.js';
 import { TorboxService } from '../services/torbox-service.js';
+import { onLateResults } from '../services/torrent-indexer-shared.js';
 
 const parsePositiveInt = (value: string | undefined, fallback: number): number => {
   const parsed = Number(value);
@@ -56,6 +57,16 @@ interface StreamCacheEntry {
 
 export class StreamController {
   private static streamCache = new Map<string, StreamCacheEntry>();
+
+  // O multi terminou depois da resposta com streams novos (o 4K que o cache não
+  // tinha, por exemplo): descarta a resposta guardada desse título para que o
+  // próximo pedido, já com o Meilisearch atualizado, busque de novo.
+  private static readonly stopLateResults = onLateResults((type, id) => {
+    const prefix = `${type}|${id}|`;
+    for (const key of [...StreamController.streamCache.keys()]) {
+      if (key.startsWith(prefix)) StreamController.streamCache.delete(key);
+    }
+  });
   private static streamRefreshInFlight = new Map<string, Promise<StreamResponse>>();
   /** hash + contexto de cada stream entregue, para reaplicar o filtro de bloqueio do RD no cache */
   private static streamOrigins = new WeakMap<StremioStream, { hash: string; context?: StreamContext }>();
@@ -143,6 +154,27 @@ export class StreamController {
       .finally(() => StreamController.streamRefreshInFlight.delete(key));
     StreamController.streamRefreshInFlight.set(key, pending);
     return pending;
+  }
+
+  /**
+   * Corta a lista já ordenada em `limit`, mas guarda o melhor stream de cada
+   * qualidade: com 15+ 1080p prontos no TorBox, o 4K ainda não baixado não some.
+   */
+  static limitKeepingEachQuality(streams: StremioStream[], limit: number): StremioStream[] {
+    if (streams.length <= limit) return streams;
+    const keep = new Set<StremioStream>();
+    const qualities = new Set<string>();
+    for (const stream of streams) {
+      const quality = stream.quality ?? 'Unknown';
+      if (qualities.has(quality)) continue;
+      qualities.add(quality);
+      keep.add(stream);
+    }
+    for (const stream of streams) {
+      if (keep.size >= limit) break;
+      keep.add(stream);
+    }
+    return streams.filter((stream) => keep.has(stream));
   }
 
   /** Tira do cache os streams que o RD bloqueou depois que a resposta foi guardada. */
@@ -286,8 +318,8 @@ export class StreamController {
             const aSize = (a.behaviorHints as any)?.videoSize ?? 0;
             const bSize = (b.behaviorHints as any)?.videoSize ?? 0;
             return bSize - aSize;
-          })
-          .slice(0, this.torboxStreamLimit);
+          });
+        streamMetadata = StreamController.limitKeepingEachQuality(streamMetadata, this.torboxStreamLimit);
       }
 
       streamMetadata.sort((a, b) => {
