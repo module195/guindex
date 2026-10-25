@@ -237,8 +237,10 @@ export const META_BUDGET_MS = parsePositiveInt(process.env.TORRENT_INDEXER_META_
 // O /stream espera por ela até o fim do orçamento, não só por essa reserva.
 export const DEBRID_MARGIN_MS = parseNonNegativeInt(process.env.TORRENT_INDEXER_DEBRID_MARGIN_MS, 1500);
 // Teto opcional dessa espera, para responder mais cedo com o debrid lento (sem
-// selo); sem ele, o /stream espera até o fim do orçamento.
-export const DEBRID_MAX_WAIT_MS = parsePositiveInt(process.env.TORRENT_INDEXER_DEBRID_MAX_WAIT_MS, Infinity);
+// selo); `0` não espera. Sem ele, o /stream espera até o fim do orçamento.
+export const DEBRID_MAX_WAIT_MS = process.env.TORRENT_INDEXER_DEBRID_MAX_WAIT_MS?.trim()
+  ? parseNonNegativeInt(process.env.TORRENT_INDEXER_DEBRID_MAX_WAIT_MS, Infinity)
+  : Infinity;
 // Fase 1: quantas queries vão ao Meilisearch (uma chamada /search por query, em paralelo).
 export const MAX_CACHE_QUERIES = parsePositiveInt(process.env.TORRENT_INDEXER_CACHE_MAX_QUERIES, 8);
 export const CACHE_TIMEOUT_MS = parsePositiveInt(process.env.TORRENT_INDEXER_CACHE_TIMEOUT_MS, 3000);

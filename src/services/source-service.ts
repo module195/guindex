@@ -5,6 +5,7 @@
 import type { SourceStream } from '../models/source-model.js';
 import { SOURCES } from '../config/sources.js';
 import type { SourceFetchOptions } from './base-source-provider.js';
+import { prefetchDebridAvailability } from './debrid-prefetch.js';
 import { REQUEST_BUDGET_MS } from './torrent-indexer-shared.js';
 
 // Timeout por provedor (ms). Padrão: o orçamento do pedido
@@ -46,6 +47,8 @@ export class SourceService {
             source.name,
           );
           console.info(`[GuIndex] ✅ Sucesso: ${source.name} retornou ${streams.length} streams.`);
+          // A checagem de cache no debrid começa já, enquanto as outras fontes respondem
+          prefetchDebridAvailability(streams, options);
           return { source: source.name, streams };
         } catch (error) {
           console.warn(`[GuIndex] ❌ Falha crítica no provedor ${source.name}:`, error);

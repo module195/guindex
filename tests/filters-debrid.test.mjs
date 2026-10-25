@@ -239,6 +239,33 @@ test('TorBox: consulta presa não segura quem chega depois; vale a primeira resp
   }
 });
 
+test('TorBox: consulta que trava depois que outro pedido entrou nela abre outra sozinha', async () => {
+  const hash = '5a'.repeat(20);
+  const shareMs = TorboxService.IN_FLIGHT_SHARE_MS;
+  TorboxService.IN_FLIGHT_SHARE_MS = 60;
+  try {
+    let calls = 0;
+    const reply = () => {
+      calls++;
+      return { statusCode: 200, data: { success: true, data: [{ hash }] } };
+    };
+    torbox.intercept(checkcached).reply(reply).delay(1500);
+    torbox.intercept(checkcached).reply(reply);
+
+    const first = TorboxService.checkCachedInfoHashes([hash], 'token-trava');
+    await sleep(10);
+    const started = Date.now();
+    const joined = await TorboxService.checkCachedInfoHashes([hash], 'token-trava');
+    assert.ok(Date.now() - started < 500, `quem entrou na consulta presa esperou ${Date.now() - started}ms`);
+    assert.equal(calls, 2);
+    assert.deepEqual([...joined.cached], [hash]);
+    assert.deepEqual([...(await first).cached], [hash]);
+    assert.equal(TorboxService.knownAvailability(hash), true, 'e a resposta fica no cache de disponibilidade');
+  } finally {
+    TorboxService.IN_FLIGHT_SHARE_MS = shareMs;
+  }
+});
+
 test('TorBox: item malformado no checkcached não derruba a consulta', async () => {
   const hash = '4a'.repeat(20);
   torbox.intercept(checkcached).reply(200, { success: true, data: [null, { hash: 123 }, 'x', { hash }] });

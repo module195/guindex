@@ -72,9 +72,10 @@ export class TorboxService {
   /** Consultas em andamento, por token + hash: a falha da chave de outro usuário não vale para a sua. */
   private static availabilityInFlight = new Map<string, AvailabilityInFlight>();
   /**
-   * Consulta em andamento há mais tempo que isso pode estar presa (conexão
-   * pendurada até o timeout): quem chega depois abre outra e fica com a primeira
-   * resposta que vier, de qualquer uma das duas.
+   * Consulta sem resposta depois disso pode estar presa (conexão pendurada até o
+   * timeout): ela mesma abre outra ao lado, e vale a primeira resposta de qualquer
+   * uma das duas, para todos que esperam por ela. Quem chega a uma consulta mais
+   * velha que isso também abre outra.
    */
   private static readonly IN_FLIGHT_SHARE_MS = 3_000;
   private static readonly CHECK_CACHED_CHUNK = 90;
@@ -96,6 +97,12 @@ export class TorboxService {
   }
 
   // ---------- Instant availability ----------
+  /** Resposta do cache de disponibilidade, sem consultar o TorBox; `undefined` se não houver. */
+  static knownAvailability(hash: string): boolean | undefined {
+    const cache = this.availabilityCache.get(hash.toLowerCase());
+    return cache && cache.expires > Date.now() ? cache.cached : undefined;
+  }
+
   static async fetchCachedInfoHashes(hashes: string[], token?: string): Promise<Set<string>> {
     return (await this.checkCachedInfoHashes(hashes, token)).cached;
   }
@@ -146,13 +153,31 @@ export class TorboxService {
       const client = new TorboxClient({ token });
       for (let i = 0; i < toFetch.length; i += TorboxService.CHECK_CACHED_CHUNK) {
         const chunk = toFetch.slice(i, i + TorboxService.CHECK_CACHED_CHUNK);
+        const entries: AvailabilityInFlight[] = [];
         const lookup = this.lookupChunk(client, chunk);
+        // Sem resposta (nem erro) a tempo, sai uma segunda consulta do mesmo lote.
+        const hedge = new Promise<Set<string> | undefined>((resolve) => {
+          const timer = setTimeout(() => {
+            const startedAt = Date.now();
+            for (const entry of entries) entry.startedAt = startedAt;
+            resolve(this.lookupChunk(client, chunk));
+          }, TorboxService.IN_FLIGHT_SHARE_MS);
+          timer.unref?.();
+          void lookup.then(() => {
+            clearTimeout(timer);
+            resolve(undefined);
+          });
+        });
         for (const h of chunk) {
-          const own = lookup.then((found) => (found ? found.has(h) : undefined));
+          const own = firstAnswer(
+            lookup.then((found) => (found ? found.has(h) : undefined)),
+            hedge.then((found) => (found ? found.has(h) : undefined))
+          );
           const previous = stale.get(h);
           const answer = previous ? firstAnswer(previous, own) : own;
           const key = `${token}|${h}`;
           const entry = { answer, startedAt: now };
+          entries.push(entry);
           this.availabilityInFlight.set(key, entry);
           pending.set(h, answer);
           void answer.then(() => {
