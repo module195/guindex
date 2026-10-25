@@ -253,6 +253,36 @@ test('multi atrasado que só repete o que o teto por fonte cortou do cache não 
   assert.deepEqual(late, [], 'a busca seguinte também o cortaria');
 });
 
+test('multi atrasado com torrent que o cache não tinha avisa mesmo com o teto por fonte cheio', async (t) => {
+  const srv = await startServer({
+    '/sources': async () => [200, SOURCES_V2],
+    '/search': async (url) => [200, {
+      results: url.searchParams.get('q') === IMDB
+        ? [
+            torrent(hash('a'), 'Matrix 1999 1080p', 'betor'),
+            torrent(hash('b'), 'Matrix 1999 1080p WEB', 'betor'),
+            torrent(hash('f'), 'Matrix 1999 2160p', 'betor'),
+            torrent(hash('e'), 'Matrix 1999 720p', 'comando_torrents'),
+          ]
+        : [],
+    }],
+    '/indexers/multi': async () => {
+      await sleep(700);
+      return [200, multiPayload([{ ...torrent(hash('9'), 'Matrix 1999 2160p HDR', 'betor'), found_in: ['betor'] }])];
+    },
+  });
+  t.after(srv.close);
+  const late = [];
+  const stop = onLateResults((type, id, hashes) => late.push(hashes));
+  t.after(stop);
+  const provider = new TorrentIndexerProvider('GuIndex', srv.base);
+
+  const streams = await provider.getStreams('movie', IMDB);
+  assert.equal(streams.length, 4);
+  await sleep(700);
+  assert.deepEqual(late, [[hash('9')]], 'o 4K novo pode entrar na busca seguinte');
+});
+
 test('teto por fonte não corta o único 4K da fonte', async (t) => {
   const srv = await startServer({
     '/sources': async () => [200, SOURCES_V2],

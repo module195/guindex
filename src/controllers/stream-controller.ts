@@ -10,7 +10,12 @@ import { SourceService } from '../services/source-service.js';
 import { StreamService } from '../services/stream-service.js';
 import { ConfigService } from '../services/config-service.js';
 import { TorboxService } from '../services/torbox-service.js';
-import { DEBRID_MAX_WAIT_MS, REQUEST_BUDGET_MS, onLateResults } from '../services/torrent-indexer-shared.js';
+import {
+  DEBRID_MAX_WAIT_MS,
+  REQUEST_BUDGET_MS,
+  isLateResultsPending,
+  onLateResults
+} from '../services/torrent-indexer-shared.js';
 
 // O orçamento do pedido (REQUEST_BUDGET_MS) é o mesmo da busca no torrent-indexer,
 // contado desde a chegada do pedido; estourar o timeout do addon no AIOStreams
@@ -91,12 +96,21 @@ export class StreamController {
       const previous = outdated.get(key);
       outdated.set(key, late && previous !== null ? new Set([...(previous ?? []), ...late]) : null);
     }
+    // Busca parcial esperando o debrid para substituir a completa: sem os streams
+    // novos, não substitui
+    for (const [key, entry] of [...StreamController.pendingReplacements]) {
+      if (key.startsWith(prefix) && !hasAllHashes(entry.sourceHashes, late)) StreamController.pendingReplacements.delete(key);
+    }
   });
   private static streamRefreshInFlight = new Map<string, Promise<StreamResponse>>();
   /** Buscas em andamento e os hashes que o multi atrasado trouxe depois que elas começaram */
   private static outdatedRefreshes = new Map<string, Set<string> | null>();
   /** Hashes que cada busca achou, para comparar com os do multi atrasado */
   private static sourceHashes = new WeakMap<StreamResponse, Set<string>>();
+  /** Parcial que substitui a completa guardada quando a consulta ao debrid terminar */
+  private static pendingReplacements = new Map<string, StreamCacheEntry>();
+  /** Respostas que o multi atrasado já deixou desatualizadas ao sair */
+  private static outdatedResponses = new WeakSet<StreamResponse>();
   /** hash + contexto de cada stream entregue, para reaplicar o filtro de bloqueio do RD no cache */
   private static streamOrigins = new WeakMap<StremioStream, { hash: string; context?: StreamContext }>();
   /** Respostas montadas sem a checagem de cache do debrid completa */
@@ -188,10 +202,18 @@ export class StreamController {
 
   /**
    * Cache-Control da resposta do /stream. É `private` porque os links de resolve
-   * levam o token do usuário; vazio ou sem a checagem do debrid não fica guardado.
+   * levam o token do usuário. Vazio, sem a checagem do debrid ou que o multi
+   * atrasado ainda pode mudar não fica guardado no cliente: o cache do servidor
+   * descarta a versão antiga, mas não alcança a cópia do cliente.
    */
-  static cacheControlFor(response: StreamResponse): string {
-    if (STREAM_CACHE_TTL_MS === 0 || response.streams.length === 0 || StreamController.partialResponses.has(response)) {
+  static cacheControlFor(response: StreamResponse, title?: { type: string; id: string }): string {
+    if (
+      STREAM_CACHE_TTL_MS === 0 ||
+      response.streams.length === 0 ||
+      StreamController.partialResponses.has(response) ||
+      StreamController.outdatedResponses.has(response) ||
+      (title !== undefined && isLateResultsPending(title.type, title.id))
+    ) {
       return 'no-store';
     }
     const maxAge = Math.floor(STREAM_CACHE_TTL_MS / 1000);
@@ -223,6 +245,7 @@ export class StreamController {
         const late = StreamController.outdatedRefreshes.get(key);
         if (late !== undefined && !hasAllHashes(sourceHashes, late)) {
           console.info(`[GuIndex] ♻️ Multi chegou durante a busca; a resposta não fica no cache: ${args.type}/${args.id}`);
+          StreamController.outdatedResponses.add(response);
           return response;
         }
         if (response.streams.length === 0) return response;
@@ -241,9 +264,14 @@ export class StreamController {
         const existing = cache.get(key);
         if (partial && existing && !existing.partial && now < existing.staleUntil) {
           // A completa guardada fica até a busca nova ficar completa
-          void sources?.settled?.then(() => {
-            if (StreamController.streamCache.get(key) === existing) this.rebuildPartial(key, entry, sources, true, existing);
-          });
+          if (sources?.settled) {
+            StreamController.pendingReplacements.set(key, entry);
+            void sources.settled.then(() => {
+              if (StreamController.pendingReplacements.get(key) !== entry) return;
+              StreamController.pendingReplacements.delete(key);
+              if (StreamController.streamCache.get(key) === existing) this.rebuildPartial(key, entry, sources, true, existing);
+            });
+          }
           return response;
         }
         cache.delete(key);

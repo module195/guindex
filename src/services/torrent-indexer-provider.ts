@@ -41,6 +41,7 @@ import {
   CACHE_TIMEOUT_MS,
   MULTI_GRACE_MS,
   MULTI_GRACE_NO_4K_MS,
+  markLateResultsPending,
   notifyLateResults,
   PHASE3_MIN_MS,
   PHASE3_MAX_QUERIES,
@@ -370,7 +371,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
         ),
       );
     } else {
-      this.watchLateMultiResults(multiPromise, type, id, fallbackTitle, context, seen, sourceCounts, streams);
+      this.watchLateMultiResults(multiPromise, type, id, fallbackTitle, context, seen, cacheTorrents);
     }
 
     // ═══════════════════════════════════════════════════════
@@ -418,9 +419,10 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
   /**
    * O multi passou da janela e a resposta saiu sem ele. Quando ele terminar, se
    * trouxe stream que a resposta não tinha (o 4K raspado em tempo real, por
-   * exemplo), avisa o cache do /stream para não servir a versão antiga. Conta
-   * como novo só o que entraria na resposta com os mesmos tetos (por fonte e
-   * total): o que o cache já tinha e os tetos cortaram não volta na busca seguinte.
+   * exemplo), avisa o cache do /stream para não servir a versão antiga. O que
+   * o cache (Fase 1) já tinha e os tetos cortaram não conta: a busca seguinte o
+   * cortaria de novo. Enquanto o multi não termina, a resposta do título não fica
+   * no cache do cliente.
    */
   private watchLateMultiResults(
     multiPromise: Promise<TorrentLike[] | undefined>,
@@ -429,20 +431,18 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     fallbackTitle: string,
     context: MatchContext,
     delivered: Set<string>,
-    sourceCounts: Map<string, number>,
-    deliveredStreams: SourceStream[],
+    cacheTorrents: TorrentLike[],
   ): void {
+    const stopPending = markLateResultsPending(type, id);
     void multiPromise
       .then((late) => {
         if (!late || late.length === 0) return;
-        const fresh = this.collectStreamsFromTorrents(
-          late,
-          fallbackTitle,
-          context,
-          new Set(delivered),
-          new Map(sourceCounts),
-          Math.max(0, 150 - deliveredStreams.length),
-        );
+        const inCache = new Set(cacheTorrents.map((torrent) => this.parser.getTorrentDedupKey(torrent)));
+        const unseen = late.filter((torrent) => {
+          const key = this.parser.getTorrentDedupKey(torrent);
+          return !key || !inCache.has(key);
+        });
+        const fresh = this.collectStreamsFromTorrents(unseen, fallbackTitle, context, new Set(delivered), new Map(), 150);
         if (fresh.length === 0) return;
         const has4K = fresh.some((stream) => stream.quality === '4K');
         logReq(
@@ -453,7 +453,8 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
         const hashes = fresh.map((stream) => this.parser.getStreamInfoHash(stream));
         notifyLateResults(type, id, hashes.every(Boolean) ? (hashes as string[]) : undefined);
       })
-      .catch(() => undefined);
+      .catch(() => undefined)
+      .finally(stopPending);
   }
 
   /**
