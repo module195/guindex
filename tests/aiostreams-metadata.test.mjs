@@ -354,17 +354,18 @@ const dunaLegendado = {
   indexer: 'torrentfilmeshds',
 };
 
-test('item 1: legendado sem PT no nome ganha Subs.PT-BR no filename', () => {
+test('item 1: legendado sem PT no nome ganha Subs no filename, sem marca de idioma', () => {
   const meta = StreamService.createStreamMetadata(mapTorrent(dunaLegendado), resolveUrl, rdOptions);
-  assert.equal(meta.behaviorHints.filename, 'Dune.Part.Two.2024.2160p.WEB-DL.DDP5.1.Atmos.HDR10.x265-FLUX.Subs.PT-BR');
+  assert.equal(meta.behaviorHints.filename, 'Dune.Part.Two.2024.2160p.WEB-DL.DDP5.1.Atmos.HDR10.x265-FLUX.Subs');
   assert.deepEqual(meta.languages, ['English']);
 });
 
 test('item 1: LEGENDADO só na página também marca legenda; scene sem marca nenhuma não', () => {
-  assert.equal(filenameLanguageTag('Movie.2020.1080p.WEB-DL', ['English'], ['Movie (2020) Legendado']), 'Subs.PT-BR');
+  assert.equal(filenameLanguageTag('Movie.2020.1080p.WEB-DL', ['English'], ['Movie (2020) Legendado']), 'Subs');
   assert.equal(filenameLanguageTag('Movie.2020.1080p.WEB-DL', ['English'], ['Movie (2020)']), undefined);
   assert.equal(filenameLanguageTag('Movie.2020.1080p.PT-BR.Subs', ['English'], ['Legendado']), undefined);
   assert.equal(filenameLanguageTag('Movie.2020.1080p.Subs.PT-BR', ['English'], ['Legendado']), undefined);
+  assert.equal(filenameLanguageTag('Movie.2020.1080p.Subbed', ['English'], ['Legendado']), undefined);
 });
 
 test('item 5: português sem marca que o AIOStreams entenda ganha PT-BR', () => {
@@ -379,12 +380,15 @@ test('marca entra antes da extensão, no separador do nome', () => {
   assert.equal(appendFilenameTag('Show.S01E02.1080p.mkv', 'PT-BR'), 'Show.S01E02.1080p.PT-BR.mkv');
   assert.equal(appendFilenameTag('Tropa de Elite 2007 1080p', 'PT-BR'), 'Tropa de Elite 2007 1080p PT-BR');
   assert.equal(appendFilenameTag('Movie.2020.1080p', undefined), 'Movie.2020.1080p');
+  // LEGENDADO no nome vira Subs: o AIOStreams o leria como áudio em português.
+  assert.equal(appendFilenameTag('Duna Parte 2 2024 1080p WEB-DL Legendado', 'Subs'), 'Duna Parte 2 2024 1080p WEB-DL Subs');
+  assert.equal(appendFilenameTag('Duna.Parte.2.2024.LEGENDADO.1080p.mkv', 'Subs'), 'Duna.Parte.2.2024.Subs.1080p.mkv');
 });
 
 test('item 1/5: a marca não muda rawFileName nem o nome de exibição', () => {
   const stream = mapTorrent(dunaLegendado);
   assert.equal(stream.rawFileName, 'Dune.Part.Two.2024.2160p.WEB-DL.DDP5.1.Atmos.HDR10.x265-FLUX');
-  assert.equal(stream.filenameLanguageTag, 'Subs.PT-BR');
+  assert.equal(stream.filenameLanguageTag, 'Subs');
 });
 
 test('item 2: runtime do Cinemeta vira behaviorHints.duration em segundos', () => {
