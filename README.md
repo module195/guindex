@@ -108,7 +108,7 @@ Stremio/AIOStreams
    - **Fase 3 (indexers mais rapidos)**: se nada veio, `/indexers/{nome}` nos indexers mais rapidos pelo historico, com as queries de texto que o multi nao cobriu (ou tambem as do multi, se ele nao respondeu)
 5. **Filtro de relevancia** — `isRelevantTorrent()` descarta resultados com titulo errado, temporada/episodio divergente, ou ano incompativel
 6. **Ranking** — Ordena por qualidade (1080p > 720p), idioma (Dual > PT > EN), e seeds
-7. **Debrid check** — Verifica cache no TorBox/RD para indicar ⚡ ou ⏳. A consulta comeca com o que o cache (Fase 1) ja trouxe, enquanto o multi roda, e com os streams de cada fonte assim que ela responde; o `/stream` espera por ela ate o fim do orcamento (menos 0,2 s para montar a resposta; `TORRENT_INDEXER_DEBRID_MAX_WAIT_MS` limita essa espera). Cada hash vale assim que o TorBox responde: um hash lento nao tira o selo dos outros. Os que nao responderem a tempo (ou cuja consulta falhou) saem como nao cacheados; a consulta termina em segundo plano (`TORBOX_CHECKCACHED_TIMEOUT_MS`) e fica no cache de disponibilidade. Essa resposta nao fica guardada como definitiva: quando a consulta termina, a resposta guardada e remontada com as respostas, e um pedido antes disso a recebe remontada com o que ja chegou
+7. **Debrid check** — Verifica cache no TorBox/RD para indicar ⚡ ou ⏳. A consulta comeca com o que o cache (Fase 1) ja trouxe, enquanto o multi roda, e com os streams de cada fonte assim que ela responde; o `/stream` espera por ela ate o fim do orcamento (menos 0,2 s para montar a resposta; `TORRENT_INDEXER_DEBRID_MAX_WAIT_MS` limita essa espera). Cada hash vale assim que o TorBox responde: um hash lento nao tira o selo dos outros. Os que nao responderem a tempo (ou cuja consulta falhou) saem como nao cacheados; a consulta termina em segundo plano (`TORBOX_CHECKCACHED_TIMEOUT_MS`) e fica no cache de disponibilidade. Essa resposta nao fica guardada como definitiva: quando a consulta termina, a resposta guardada e remontada com as respostas, e um pedido antes disso a recebe remontada com o que ja chegou. Com o Real-Debrid, a lista da conta ja em memoria vale na hora. Se o multi terminar com streams novos enquanto o `/stream` ainda espera o debrid, essa resposta nao fica no cache e o proximo pedido busca de novo
 8. **Resposta** — Retorna `SourceStream[]` formatados com titulo, qualidade, idioma e badges
 
 ### Mapa de indexers
@@ -427,7 +427,7 @@ npm start
 |----------|--------|-----------|
 | `TORBOX_WAIT_VIDEO_URL` | — | Video de espera enquanto TorBox processa |
 | `TORBOX_STREAM_LIMIT` | `15` | Limite de streams TorBox (o melhor de cada qualidade sempre entra) |
-| `TORBOX_CHECKCACHED_TIMEOUT_MS` | `15000` | Timeout da consulta de cache no TorBox. O `/stream` espera por ela so ate o fim do orcamento; o resto roda em segundo plano e enche o cache de disponibilidade. Consulta sem resposta em 3 s abre outra ao lado e vale a primeira resposta, para todos que esperam por ela |
+| `TORBOX_CHECKCACHED_TIMEOUT_MS` | `15000` | Timeout da consulta de cache no TorBox. O `/stream` espera por ela so ate o fim do orcamento; o resto roda em segundo plano e enche o cache de disponibilidade. Consulta sem resposta em 3 s abre outra ao lado, so com os hashes ainda sem resposta, e vale a primeira resposta, para todos que esperam por ela |
 
 ### Perfil recomendado para VPS
 

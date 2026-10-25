@@ -155,23 +155,44 @@ export class TorboxService {
         const chunk = toFetch.slice(i, i + TorboxService.CHECK_CACHED_CHUNK);
         const entries: AvailabilityInFlight[] = [];
         const lookup = this.lookupChunk(client, chunk);
-        // Sem resposta (nem erro) a tempo, sai uma segunda consulta do mesmo lote.
-        const hedge = new Promise<Set<string> | undefined>((resolve) => {
+        // Sem resposta (nem erro) a tempo, sai uma segunda consulta do mesmo lote,
+        // só com os hashes que o cache de disponibilidade ainda não sabe (a consulta
+        // antiga, ou a de outra chave, pode ter respondido os outros). Ela não sai
+        // se a consulta do lote, ou todas as respostas dele, chegarem antes.
+        let stopHedge: () => void = () => undefined;
+        const hedge = new Promise<Map<string, boolean> | undefined>((resolve) => {
           const timer = setTimeout(() => {
+            const answers = new Map<string, boolean>();
+            const missing: string[] = [];
+            for (const h of chunk) {
+              const known = TorboxService.knownAvailability(h);
+              if (known === undefined) missing.push(h);
+              else answers.set(h, known);
+            }
+            if (missing.length === 0) {
+              resolve(answers);
+              return;
+            }
             const startedAt = Date.now();
             for (const entry of entries) entry.startedAt = startedAt;
-            resolve(this.lookupChunk(client, chunk));
+            resolve(
+              this.lookupChunk(client, missing).then((found) => {
+                if (found) for (const h of missing) answers.set(h, found.has(h));
+                return answers;
+              })
+            );
           }, TorboxService.IN_FLIGHT_SHARE_MS);
           timer.unref?.();
-          void lookup.then(() => {
+          stopHedge = () => {
             clearTimeout(timer);
             resolve(undefined);
-          });
+          };
         });
+        void lookup.then(() => stopHedge());
         for (const h of chunk) {
           const own = firstAnswer(
             lookup.then((found) => (found ? found.has(h) : undefined)),
-            hedge.then((found) => (found ? found.has(h) : undefined))
+            hedge.then((answers) => answers?.get(h))
           );
           const previous = stale.get(h);
           const answer = previous ? firstAnswer(previous, own) : own;
@@ -184,6 +205,7 @@ export class TorboxService {
             if (this.availabilityInFlight.get(key) === entry) this.availabilityInFlight.delete(key);
           });
         }
+        void Promise.all(entries.map((entry) => entry.answer)).then(() => stopHedge());
       }
     }
 

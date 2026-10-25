@@ -42,3 +42,23 @@ test('com 0, responde na hora com o que o TorBox já respondeu', async () => {
   const byHash = Object.fromEntries(result.streams.map((s) => [s.url.includes(KNOWN) ? 'known' : 'slow', s.behaviorHints.cached]));
   assert.deepEqual(byHash, { known: true, slow: false });
 });
+
+test('com 0, o Real-Debrid usa a lista da conta já em memória', async () => {
+  const { RealDebridService } = await import('../dist/services/realdebrid-service.js');
+  const token = 'rd-tok-0123456789abcdef';
+  SourceService.fetchStreamsFromAllSources = async () =>
+    [KNOWN, SLOW].map((hash) => ({ title: `${hash}.1080p.mkv`, magnet: `magnet:?xt=urn:btih:${hash}`, infoHash: hash, source: 'betor' }));
+  RealDebridService.accountHashesCache.set(token, { torrents: new Map([[KNOWN, 'id1']]), expires: Date.now() + 60_000 });
+
+  const result = await new StreamController().handleStreamRequest({
+    type: 'movie',
+    id: 'tt0133101',
+    extra: { debridProvider: 'realdebrid', realdebridToken: token },
+  });
+
+  const byHash = Object.fromEntries(
+    result.streams.map((s) => [s.url.includes(KNOWN) ? 'known' : 'slow', s.behaviorHints.realDebridReady])
+  );
+  assert.deepEqual(byHash, { known: true, slow: false });
+  assert.notEqual(StreamController.cacheControlFor(result), 'no-store');
+});

@@ -71,13 +71,20 @@ export class StreamController {
   // O multi terminou depois da resposta com streams novos (o 4K que o cache não
   // tinha, por exemplo): descarta a resposta guardada desse título para que o
   // próximo pedido, já com o Meilisearch atualizado, busque de novo.
+  // A busca desse título ainda em andamento também não tem os streams novos: a
+  // resposta dela vai para quem pediu, mas não fica guardada.
   private static readonly stopLateResults = onLateResults((type, id) => {
     const prefix = `${type}|${id}|`;
     for (const key of [...StreamController.streamCache.keys()]) {
       if (key.startsWith(prefix)) StreamController.streamCache.delete(key);
     }
+    for (const key of StreamController.streamRefreshInFlight.keys()) {
+      if (key.startsWith(prefix)) StreamController.outdatedRefreshes.add(key);
+    }
   });
   private static streamRefreshInFlight = new Map<string, Promise<StreamResponse>>();
+  /** Buscas em andamento que o multi atrasado deixou desatualizadas */
+  private static outdatedRefreshes = new Set<string>();
   /** hash + contexto de cada stream entregue, para reaplicar o filtro de bloqueio do RD no cache */
   private static streamOrigins = new WeakMap<StremioStream, { hash: string; context?: StreamContext }>();
   /** Respostas montadas sem a checagem de cache do debrid completa */
@@ -132,13 +139,16 @@ export class StreamController {
    * Remonta a resposta parcial guardada com o que o debrid respondeu depois dela e
    * com o cache de disponibilidade do TorBox, na hora e sem consultar nada.
    * Completa, ela substitui a guardada. Com a consulta já terminada (`settled`),
-   * substitui de qualquer jeito e solta os streams de origem.
+   * substitui de qualquer jeito e solta os streams de origem. Uma parcial que não
+   * foi guardada (`replaces` é a completa que ficou no lugar dela) só a substitui
+   * completa.
    */
   private rebuildPartial(
     key: string,
     entry: StreamCacheEntry,
     sources: ResponseSources,
-    settled: boolean
+    settled: boolean,
+    replaces: StreamCacheEntry = entry
   ): StreamResponse {
     let rebuilt: StreamResponse;
     try {
@@ -151,7 +161,7 @@ export class StreamController {
     const complete = !StreamController.partialResponses.has(rebuilt);
     if (settled) StreamController.pendingSources.delete(rebuilt);
     const cache = StreamController.streamCache;
-    if ((complete || settled) && cache.get(key) === entry) {
+    if ((complete || (settled && replaces === entry)) && cache.get(key) === replaces) {
       // A busca é de quando a parcial foi guardada; completa, vale o TTL desde então
       const storedAt = entry.staleUntil - Math.max(STREAM_CACHE_TTL_MS, STREAM_CACHE_STALE_MS);
       cache.set(key, {
@@ -187,7 +197,8 @@ export class StreamController {
    * Uma busca por chave; resultado não vazio entra no cache. Resposta sem a
    * checagem do debrid entra já velha: o próximo pedido sai dela na hora, sem
    * esperar outra busca, e a refaz em segundo plano com a disponibilidade pronta.
-   * Ela não substitui uma resposta completa ainda válida.
+   * Ela não substitui uma resposta completa ainda válida, a não ser que fique
+   * completa quando a consulta ao debrid terminar.
    */
   private refreshStreams(key: string, args: StreamRequest): Promise<StreamResponse> {
     const inFlight = StreamController.streamRefreshInFlight.get(key);
@@ -196,12 +207,28 @@ export class StreamController {
     }
     const pending = this.computeStreams(args)
       .then((response) => {
+        if (StreamController.outdatedRefreshes.delete(key)) {
+          console.info(`[GuIndex] ♻️ Multi chegou durante a busca; a resposta não fica no cache: ${args.type}/${args.id}`);
+          return response;
+        }
         if (response.streams.length === 0) return response;
         const cache = StreamController.streamCache;
         const now = Date.now();
         const partial = StreamController.partialResponses.has(response);
+        const entry: StreamCacheEntry = {
+          response,
+          freshUntil: partial ? now : now + STREAM_CACHE_TTL_MS,
+          staleUntil: now + Math.max(STREAM_CACHE_TTL_MS, STREAM_CACHE_STALE_MS),
+          partial
+        };
+        // Quando a consulta ao debrid terminar, a parcial é remontada com as respostas
+        const sources = partial ? StreamController.pendingSources.get(response) : undefined;
         const existing = cache.get(key);
         if (partial && existing && !existing.partial && now < existing.staleUntil) {
+          // A completa guardada fica até a busca nova ficar completa
+          void sources?.settled?.then(() => {
+            if (StreamController.streamCache.get(key) === existing) this.rebuildPartial(key, entry, sources, true, existing);
+          });
           return response;
         }
         cache.delete(key);
@@ -209,21 +236,16 @@ export class StreamController {
           const oldest = cache.keys().next().value;
           if (oldest !== undefined) cache.delete(oldest);
         }
-        const entry: StreamCacheEntry = {
-          response,
-          freshUntil: partial ? now : now + STREAM_CACHE_TTL_MS,
-          staleUntil: now + Math.max(STREAM_CACHE_TTL_MS, STREAM_CACHE_STALE_MS),
-          partial
-        };
         cache.set(key, entry);
-        // Quando a consulta ao debrid terminar, a parcial guardada é remontada com as respostas
-        const sources = partial ? StreamController.pendingSources.get(response) : undefined;
         void sources?.settled?.then(() => {
           if (StreamController.streamCache.get(key) === entry) this.rebuildPartial(key, entry, sources, true);
         });
         return response;
       })
-      .finally(() => StreamController.streamRefreshInFlight.delete(key));
+      .finally(() => {
+        StreamController.streamRefreshInFlight.delete(key);
+        StreamController.outdatedRefreshes.delete(key);
+      });
     StreamController.streamRefreshInFlight.set(key, pending);
     return pending;
   }
@@ -333,6 +355,7 @@ export class StreamController {
           `[GuIndex] ⏰ Verificação de cache no Debrid passou do prazo (${Math.max(0, debridWaitMs)}ms); os streams sem resposta seguem como não cacheados`
         );
       }
+      this.applyKnownAvailability(sources);
       return this.formatResponse(sources);
     } catch (error) {
       console.error(`Stream processing error: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -340,13 +363,19 @@ export class StreamController {
     }
   }
 
-  /** Aplica, sem consultar nada, o que o cache de disponibilidade do TorBox já sabe. */
+  /**
+   * Aplica, sem consultar nada, o que já se sabe: o cache de disponibilidade do
+   * TorBox ou a lista da conta do Real-Debrid já em memória.
+   */
   private applyKnownAvailability(sources: ResponseSources): void {
-    if (sources.provider !== 'torbox') return;
+    if (!sources.token) return;
+    const account = sources.provider === 'torbox' ? undefined : RealDebridService.knownAccountTorrents(sources.token);
+    if (sources.provider !== 'torbox' && !account) return;
     for (const stream of sources.streams) {
       if (stream.cached !== undefined) continue;
       const hash = this.getStreamInfoHash(stream);
-      const known = hash ? TorboxService.knownAvailability(hash) : undefined;
+      if (!hash) continue;
+      const known = account ? account.has(hash) : TorboxService.knownAvailability(hash);
       if (known !== undefined) stream.cached = known;
     }
   }
