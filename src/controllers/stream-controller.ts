@@ -106,6 +106,7 @@ export class StreamController {
         console.info(`[GuIndex] ⚠️ Sem token Debrid. Retornando em modo fallback (Magnets diretos)`);
       }
 
+      let blockedCount = 0;
       let streamMetadata: StremioStream[] = processableStreams
         .map((stream) => {
           const magnet = this.extractStreamMagnet(stream);
@@ -133,6 +134,12 @@ export class StreamController {
             return undefined;
           }
 
+          const hash = selectedProvider !== 'torbox' ? this.getStreamInfoHash(stream) : undefined;
+          if (hash && RealDebridService.isBlocked(hash, stream.context)) {
+            blockedCount++;
+            return undefined;
+          }
+
           const resolveUrl = this.buildResolveUrl({
             token: selectedToken,
             magnet,
@@ -146,6 +153,10 @@ export class StreamController {
           return meta;
         })
         .filter((stream): stream is StremioStream => Boolean(stream));
+
+      if (blockedCount > 0) {
+        console.info(`[GuIndex] 🚫 ${blockedCount} streams escondidos: arquivo bloqueado pelo Real-Debrid (infringing_file)`);
+      }
 
       // Sort and limit for TorBox to keep JSON lean
       if (selectedProvider === 'torbox') {

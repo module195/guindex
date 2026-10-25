@@ -46,6 +46,37 @@ const JUNK_EXTENSIONS =
 const JUNK_CONTENT_REGEX =
   /\b(sample|trailer|extras?|bonus|featurette|behind.?the.?scenes|credits?|creditos|poster|rarbg|nfo|subs?|propaganda|anuncio|promo|preview|teaser|1xbet|banner|ad[s_]|screener|watermark)\b/i;
 
+/** error_code 35 do RD: arquivo bloqueado por denúncia de direitos autorais */
+const RD_INFRINGING_FILE_CODE = 35;
+
+/** O RD recusou o arquivo (error_code 35, "infringing_file"); tentar de novo não adianta. */
+export class RealDebridBlockedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'RealDebridBlockedError';
+  }
+}
+
+/** Erro de uma chamada ao RD; vira RealDebridBlockedError quando o corpo traz o error_code 35. */
+function realDebridError(prefix: string, statusCode: number, body: string): Error {
+  let parsed: { error?: unknown; error_code?: unknown } | undefined;
+  try {
+    parsed = JSON.parse(body) as { error?: unknown; error_code?: unknown };
+  } catch {
+    parsed = undefined;
+  }
+  const message = `${prefix}: ${statusCode} ${body}`;
+  if (parsed?.error_code === RD_INFRINGING_FILE_CODE || parsed?.error === 'infringing_file') {
+    return new RealDebridBlockedError(message);
+  }
+  return new Error(message);
+}
+
+/** Extrai o btih (hex, minúsculo) de um magnet. */
+function magnetHash(magnet: string): string | undefined {
+  return magnet.match(/xt=urn:btih:([a-f0-9]{40})/i)?.[1]?.toLowerCase();
+}
+
 export class RealDebridService {
   /**
    * O Real-Debrid desativou /torrents/instantAvailability em nov/2024 (error_code 37,
@@ -63,6 +94,50 @@ export class RealDebridService {
     return Number.isFinite(parsed) && parsed >= 0 ? parsed : 10 * 60 * 1000;
   })();
   private static accountTorrentsDisabledUntil = new Map<string, number>();
+  /**
+   * Arquivos que o RD recusou com infringing_file. O bloqueio vale para o
+   * conteúdo, não para a conta, então a chave é hash + episódio, sem token.
+   */
+  private static readonly BLOCKED_TTL_MS = (() => {
+    const parsed = Number.parseInt(process.env.RD_BLOCKED_TTL_MS ?? '', 10);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : 24 * 60 * 60 * 1000;
+  })();
+  private static readonly BLOCKED_MAX_ENTRIES = 5000;
+  private static blockedFiles = new Map<string, number>();
+
+  private static blockedKey(hash: string, context?: StreamContext): string {
+    const episode = context?.season !== undefined && context?.episode !== undefined
+      ? `${context.season}x${context.episode}`
+      : '';
+    return `${hash.toLowerCase()}|${episode}`;
+  }
+
+  /** true se o RD já recusou este arquivo (hash + episódio) com infringing_file. */
+  static isBlocked(hash: string, context?: StreamContext): boolean {
+    const key = this.blockedKey(hash, context);
+    const expires = this.blockedFiles.get(key);
+    if (expires === undefined) {
+      return false;
+    }
+    if (expires <= Date.now()) {
+      this.blockedFiles.delete(key);
+      return false;
+    }
+    return true;
+  }
+
+  static markBlocked(hash: string, context?: StreamContext): void {
+    if (this.BLOCKED_TTL_MS === 0) {
+      return;
+    }
+    if (this.blockedFiles.size >= this.BLOCKED_MAX_ENTRIES) {
+      const oldest = this.blockedFiles.keys().next().value;
+      if (oldest !== undefined) {
+        this.blockedFiles.delete(oldest);
+      }
+    }
+    this.blockedFiles.set(this.blockedKey(hash, context), Date.now() + this.BLOCKED_TTL_MS);
+  }
 
   constructor(private token: string) {}
 
@@ -82,7 +157,7 @@ export class RealDebridService {
 
     if (response.statusCode >= 400) {
       const body = await response.body.text().catch(() => '');
-      throw new Error(`Failed to add magnet: ${response.statusCode} ${body}`);
+      throw realDebridError('Failed to add magnet', response.statusCode, body);
     }
 
     return await response.body.json() as MagnetResponse;
@@ -102,7 +177,7 @@ export class RealDebridService {
 
     if (response.statusCode >= 400) {
       const body = await response.body.text().catch(() => '');
-      throw new Error(`Failed to select files: ${response.statusCode} ${body}`);
+      throw realDebridError('Failed to select files', response.statusCode, body);
     }
   }
 
@@ -115,7 +190,7 @@ export class RealDebridService {
 
     if (response.statusCode >= 400) {
       const body = await response.body.text().catch(() => '');
-      throw new Error(`Failed to get torrent info: ${response.statusCode} ${body}`);
+      throw realDebridError('Failed to get torrent info', response.statusCode, body);
     }
 
     return await response.body.json() as TorrentInfo;
@@ -135,7 +210,7 @@ export class RealDebridService {
 
     if (response.statusCode >= 400) {
       const body = await response.body.text().catch(() => '');
-      throw new Error(`Failed to unrestrict link: ${response.statusCode} ${body}`);
+      throw realDebridError('Failed to unrestrict link', response.statusCode, body);
     }
 
     return await response.body.json() as UnrestrictResponse;
@@ -235,9 +310,28 @@ export class RealDebridService {
   // ── Magnet → Direct URL ─────────────────────────────────────────────────
 
   async processMagnetToDirectUrl(magnet: string, context?: StreamContext): Promise<string> {
+    const hash = magnetHash(magnet);
+    if (hash && RealDebridService.isBlocked(hash, context)) {
+      throw new RealDebridBlockedError(`Real-Debrid já recusou este arquivo (infringing_file): ${hash}`);
+    }
+    try {
+      return await this.resolveMagnet(magnet, context);
+    } catch (error) {
+      if (error instanceof RealDebridBlockedError && hash) {
+        RealDebridService.markBlocked(hash, context);
+        console.warn(`[RD] arquivo bloqueado pelo Real-Debrid (infringing_file): ${hash}`);
+      }
+      throw error;
+    }
+  }
+
+  private async resolveMagnet(magnet: string, context?: StreamContext): Promise<string> {
     // Stream cacheado = torrent já baixado na conta. Reaproveitar evita uma
     // entrada nova na conta a cada play.
     const reused = await this.tryExistingTorrent(magnet, context).catch((error) => {
+      if (error instanceof RealDebridBlockedError) {
+        throw error;
+      }
       console.warn('[RD] falha ao reaproveitar torrent da conta; adicionando o magnet:', error);
       return undefined;
     });
@@ -286,7 +380,7 @@ export class RealDebridService {
    * está entre os selecionados. Senão devolve undefined e o fluxo normal segue.
    */
   private async tryExistingTorrent(magnet: string, context?: StreamContext): Promise<string | undefined> {
-    const hash = magnet.match(/xt=urn:btih:([a-f0-9]{40})/i)?.[1]?.toLowerCase();
+    const hash = magnetHash(magnet);
     if (!hash) {
       return undefined;
     }

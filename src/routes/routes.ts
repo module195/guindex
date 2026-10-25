@@ -11,6 +11,7 @@ import stremioAddonSdk from 'stremio-addon-sdk';
 import { ConfigController } from '../controllers/config-controller.js';
 import { StreamController } from '../controllers/stream-controller.js';
 import { ConfigService } from '../services/config-service.js';
+import { RealDebridBlockedError } from '../services/realdebrid-service.js';
 import { StreamService } from '../services/stream-service.js';
 import type { StreamRequest } from '../models/stream-model.js';
 
@@ -266,6 +267,14 @@ export function setupRoutes() {
       });
       reply.redirect(directUrl);
     } catch (error) {
+      if (error instanceof RealDebridBlockedError) {
+        // 451: o RD recusou o arquivo por denúncia; outro play não vai funcionar
+        reply.status(451).send({
+          error: 'infringing_file',
+          message: 'O Real-Debrid bloqueou este arquivo (infringing_file). Escolha outro stream.'
+        });
+        return;
+      }
       console.error(`[GuIndex] ❌ Erro no processamento do magnet: ${error instanceof Error ? error.message : 'Unknown error'}`);
       reply.status(500).send({ error: 'Failed to process magnet link' });
     }
