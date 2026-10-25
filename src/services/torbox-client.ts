@@ -74,8 +74,7 @@ export class TorboxClient {
   private readonly baseUrl: string;
   private readonly token: string;
   private readonly userAgent: string;
-  // A checagem de cache roda dentro do prazo da busca; o resto é play, e o player espera
-  private readonly cacheCheckTimeout = 4000; // ms
+  // Chamadas de play (o player espera); a checagem de cache passa o próprio timeout
   private readonly requestTimeout = 15000; // ms
 
   constructor(options: TorboxClientOptions) {
@@ -95,7 +94,7 @@ export class TorboxClient {
   private async get<T>(
     path: string,
     search?: Record<string, string | number | boolean | string[]>,
-    timeout = this.requestTimeout
+    timeoutMs = this.requestTimeout
   ): Promise<T> {
     const url = new URL(this.baseUrl + path);
     if (search) {
@@ -111,8 +110,8 @@ export class TorboxClient {
 
     const res = await request(url.toString(), {
       headers: this.headers(),
-      headersTimeout: timeout,
-      bodyTimeout: timeout
+      headersTimeout: timeoutMs,
+      bodyTimeout: timeoutMs
     });
     const bodyText = await res.body.text();
 
@@ -157,13 +156,25 @@ export class TorboxClient {
     return (parsed.data ?? (parsed as unknown as T)) as T;
   }
 
-  async checkTorrentsCached(hashes: string[], listFiles = true): Promise<CheckCachedItem[]> {
+  /**
+   * Hashes cacheados no TorBox; os que não estão no cache não voltam na lista.
+   * `timeoutMs` substitui o timeout padrão (a checagem pode rodar em segundo plano).
+   */
+  async checkTorrentsCached(hashes: string[], listFiles = false, timeoutMs?: number): Promise<CheckCachedItem[]> {
     if (!hashes.length) return [];
-    return this.get<CheckCachedItem[]>(
+    const data = await this.get<CheckCachedItem[] | Record<string, CheckCachedItem> | null>(
       '/v1/api/torrents/checkcached',
-      { hash: hashes, format: 'list', list_files: listFiles },
-      this.cacheCheckTimeout
+      {
+        hash: hashes,
+        format: 'list',
+        list_files: listFiles
+      },
+      timeoutMs
     );
+    if (Array.isArray(data)) return data;
+    if (!data || typeof data !== 'object') return [];
+    // format=object: chave é o hash
+    return Object.entries(data).map(([hash, item]) => ({ hash, ...(item ?? {}) }));
   }
 
   async createTorrent(magnet: string): Promise<{ torrent_id: number; hash: string }> {
@@ -239,11 +250,7 @@ export class TorboxClient {
 
   async checkWebDlCached(hashes: string[]): Promise<CheckCachedItem[]> {
     if (!hashes.length) return [];
-    return this.get<CheckCachedItem[]>(
-      '/v1/api/webdl/checkcached',
-      { hash: hashes, format: 'list' },
-      this.cacheCheckTimeout
-    );
+    return this.get<CheckCachedItem[]>('/v1/api/webdl/checkcached', { hash: hashes, format: 'list' });
   }
 
   async createWebDl(link: string, name?: string): Promise<{ webdownload_id: number; hash: string }> {
