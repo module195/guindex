@@ -44,6 +44,16 @@ export function setupRoutes() {
     return streamController.handleStreamRequest(args);
   });
 
+  // O manifest não leva token e só muda com um deploy. Cache longo e stale-if-error
+  // evitam que uma falha momentânea tire o addon do agregador (o AIOStreams guarda
+  // falha de manifest por 60 s).
+  const MANIFEST_CACHE_CONTROL = 'public, max-age=3600, stale-while-revalidate=86400, stale-if-error=604800';
+  const sendManifest = (reply: FastifyReply, isConfigured: boolean) => {
+    reply
+      .header('cache-control', MANIFEST_CACHE_CONTROL)
+      .send(configController.createAddonManifest(isConfigured));
+  };
+
   /**
    * ✅ Suporte a tokens do Real-Debrid no caminho
    * Exemplo: /TOKEN/manifest.json
@@ -55,8 +65,7 @@ export function setupRoutes() {
       headers: req.headers
     });
 
-    const manifest = configController.createAddonManifest(!!debridSelection.token);
-    reply.send(manifest);
+    sendManifest(reply, !!debridSelection.token);
   });
 
   // Caso com token simples no caminho (compatibilidade legada)
@@ -69,8 +78,7 @@ export function setupRoutes() {
       headers: req.headers,
       routeParams: { token }
     });
-    const manifest = configController.createAddonManifest(!!debridSelection.token);
-    reply.send(manifest);
+    sendManifest(reply, !!debridSelection.token);
   });
 
   // Novo formato: /provider/token/manifest.json
@@ -84,8 +92,7 @@ export function setupRoutes() {
       routeParams: { token: token }
     });
 
-    const manifest = configController.createAddonManifest(!!debridSelection.token);
-    reply.send(manifest);
+    sendManifest(reply, !!debridSelection.token);
   });
 
   fastify.get('/configure', async (req, reply) => {
