@@ -229,6 +229,9 @@ export const WARM_EXTRA_QUERIES = parseNonNegativeInt(
 );
 // Orçamento da busca por pedido, desde a chegada (o AIOStreams costuma dar 10 s ao addon).
 export const REQUEST_BUDGET_MS = parsePositiveInt(process.env.TORRENT_INDEXER_REQUEST_BUDGET_MS, 8500);
+// Quanto esperar por Cinemeta/TMDB antes de buscar só com o IMDb e os títulos que já
+// chegaram; a consulta segue em segundo plano e enche o cache para o próximo pedido.
+export const META_BUDGET_MS = parsePositiveInt(process.env.TORRENT_INDEXER_META_BUDGET_MS, 1500);
 // Reserva, dentro do orçamento, para a consulta de cache do debrid depois da busca.
 export const DEBRID_MARGIN_MS = parseNonNegativeInt(process.env.TORRENT_INDEXER_DEBRID_MARGIN_MS, 1500);
 // Fase 1: quantas queries vão ao Meilisearch (uma chamada /search por query, em paralelo).
