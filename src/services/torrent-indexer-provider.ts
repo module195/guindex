@@ -8,6 +8,7 @@ import { RealDebridService } from './realdebrid-service.js';
 import { TorboxService } from './torbox-service.js';
 import type { SourceStream, StreamContext } from '../models/source-model.js';
 import { TorrentParser } from './torrent-parser.js';
+import { filenameLanguageTag } from './audio-language.js';
 import type {
   CinemetaMeta,
   TorrentLike,
@@ -252,6 +253,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
 
     const targetTitle = displayTitles[0];
     const releaseYear = this.parser.extractReleaseYear(meta);
+    const runtimeSeconds = this.parser.extractRuntimeSeconds(meta);
     const episodeTitle =
       parsed.season !== undefined && parsed.episode !== undefined
         ? this.parser.findEpisodeTitle(meta, parsed.season, parsed.episode)
@@ -298,7 +300,8 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
       reqId,
       logName: targetTitle || queries[0] || id,
       releaseYear,
-      episodeTitle
+      episodeTitle,
+      runtimeSeconds
     };
 
     const seen = new Set<string>();
@@ -1573,6 +1576,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
 
   const rawIndexer = this.extractIndexerRawName(torrent);
   const indexerSlug = rawIndexer ? this.parser.normalizeIndexerSlug(rawIndexer) : undefined;
+  const indexerLabel = (indexerSlug && this.parser.indexerLabel(indexerSlug)) || sourceLabel;
 
   const stream: SourceStream = {
     name: nameLines.join('\n'),
@@ -1580,6 +1584,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     fileName: this.parser.buildStreamFileName(selectedFileName, rawTitle, displayTitle, torrent),
     source: sourceLabel,
     indexer: indexerSlug,
+    indexerLabel,
     magnet,
     cached: false
   };
@@ -1611,6 +1616,15 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
 
   if (languages.length > 0) {
     stream.languages = languages;
+  }
+
+  if (rawFileName) {
+    const record = torrent as Record<string, unknown>;
+    const hints = [record.title, record.original_title].filter((value): value is string => typeof value === 'string');
+    const tag = filenameLanguageTag(rawFileName, languages, hints);
+    if (tag) {
+      stream.filenameLanguageTag = tag;
+    }
   }
 
   const infoHash =
@@ -1647,6 +1661,15 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
 
   if (size !== undefined) {
     stream.size = size;
+  }
+
+  // O runtime do Cinemeta é o do filme ou de um episódio: só vale para um arquivo
+  // só, nunca para um pack inteiro (o bitrate sairia multiplicado pelos episódios).
+  if (
+    context.runtimeSeconds !== undefined &&
+    (context.type.toLowerCase() === 'movie' || Boolean(selectedFile))
+  ) {
+    stream.durationSeconds = context.runtimeSeconds;
   }
 
   if (seeds !== undefined) {

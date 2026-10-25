@@ -174,6 +174,28 @@ export class TorrentParser {
     return variants.slice(0, 4);
   }
 
+  // Slugs do torrent-indexer (normalizeIndexerSlug) → nome legível para o formatter do AIOStreams.
+  static readonly INDEXER_LABEL_MAP: Record<string, string> = {
+    'torrent-dos-filmes': 'Torrent dos Filmes',
+    torrent_dos_filmes: 'Torrent dos Filmes',
+    comando_torrents: 'Comando',
+    rede_torrent: 'Rede Torrent',
+    torrentfilmeshds: 'Torrent Filmes HDs',
+    bludv: 'BluDV',
+    bludv_ru: 'BluDV',
+    baixarapido: 'Baixa Rápido',
+    betor: 'BeTor',
+    via_filmes: 'Via Filmes',
+    'starck-filmes': 'Starck Filmes',
+    filme_torrent: 'Filme Torrent',
+    vaca_torrent: 'Vaca Torrent',
+  };
+
+  /** Nome legível de um slug de indexador conhecido. */
+  indexerLabel(slug: string): string | undefined {
+    return TorrentParser.INDEXER_LABEL_MAP[slug.toLowerCase()];
+  }
+
   normalizeIndexerSlug(value: string): string {
     const cleaned = this.sanitizeQuery(value)?.toLowerCase() ?? value.toLowerCase();
     return cleaned
@@ -1252,6 +1274,22 @@ export class TorrentParser {
     return Array.from(titles);
   }
 
+  /** Runtime do Cinemeta ("152 min", "2h 32min", "1h") em segundos. */
+  extractRuntimeSeconds(meta?: CinemetaMeta): number | undefined {
+    const runtime = meta?.runtime;
+    if (typeof runtime === 'number' && Number.isFinite(runtime) && runtime > 0) {
+      return Math.round(runtime * 60);
+    }
+    if (typeof runtime !== 'string') {
+      return undefined;
+    }
+    const hours = runtime.match(/(\d+)\s*h/i);
+    const minutes = runtime.match(/(\d+)\s*m/i);
+    const bare = !hours && !minutes ? runtime.match(/^\s*(\d+)\s*$/) : null;
+    const total = (hours ? Number(hours[1]) * 60 : 0) + (minutes ? Number(minutes[1]) : 0) + (bare ? Number(bare[1]) : 0);
+    return total > 0 ? total * 60 : undefined;
+  }
+
   extractReleaseYear(meta?: CinemetaMeta): number | undefined {
     if (!meta) {
       return undefined;
@@ -1580,7 +1618,8 @@ export class TorrentParser {
       const pathCandidate = this.toString(record.path) || this.toString(record.name) || this.toString(record.file);
       if (!pathCandidate || !pathCandidate.trim()) continue;
 
-      const sizeRaw = record.size ?? record.sizeBytes ?? record.size_bytes ?? record.bytes;
+      // size_bytes (número exato do torrent-indexer) antes de size, que vem formatado ("1.2 GB")
+      const sizeRaw = record.size_bytes ?? record.sizeBytes ?? record.size ?? record.bytes;
       const size = this.toBytes(sizeRaw);
       files.push({ path: pathCandidate.trim(), size, originalIndex: i });
     }

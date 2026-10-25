@@ -3,7 +3,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { detectReleaseLanguages, languagesFromAudioValues, reconcileAudioWithRelease } from '../dist/services/audio-language.js';
+import {
+  appendFilenameTag,
+  detectReleaseLanguages,
+  filenameLanguageTag,
+  languagesFromAudioValues,
+  reconcileAudioWithRelease,
+} from '../dist/services/audio-language.js';
 import { StreamService } from '../dist/services/stream-service.js';
 import { TorrentIndexerProvider } from '../dist/services/torrent-indexer-provider.js';
 
@@ -297,7 +303,7 @@ test('A3: sem rawFileName, usa o basename do fileName de exibição', () => {
 
 // --- Fluxo provider → service ---------------------------------------------------
 
-test('fluxo: Tropa de Elite sai só com 🇧🇷 e filename = dn', () => {
+test('fluxo: Tropa de Elite sai só com 🇧🇷 e filename = dn + PT-BR', () => {
   const source = mapTorrent(tropaDeElite);
   const meta = StreamService.createStreamMetadata(source, 'https://guindex.example/resolve/abc', {
     debridProvider: 'realdebrid',
@@ -308,10 +314,12 @@ test('fluxo: Tropa de Elite sai só com 🇧🇷 e filename = dn', () => {
   assert.deepEqual(meta.languages, ['Portuguese']);
   assert.match(meta.name, /🇧🇷/);
   assert.doesNotMatch(meta.name, /🇩🇪|🇯🇵|🇬🇧|🇺🇸/);
-  assert.equal(meta.behaviorHints.filename, 'Tropa de Elite 2007 1080p BluRay x264 Nacional BluDV');
+  // NACIONAL o AIOStreams não reconhece; PT-BR ele lê como Portuguese (Brazil).
+  assert.equal(meta.behaviorHints.filename, 'Tropa de Elite 2007 1080p BluRay x264 Nacional BluDV PT-BR');
   assert.equal(meta.behaviorHints.seeders, 15);
-  // normalizeIndexerSlug do provider troca '-' por '_'.
-  assert.equal(meta.behaviorHints.indexer, 'torrent_dos_filmes');
+  // behaviorHints.indexer leva o nome legível; o slug fica no topo.
+  assert.equal(meta.behaviorHints.indexer, 'Torrent dos Filmes');
+  assert.equal(meta.indexer, 'torrent_dos_filmes');
   assert.equal(meta.behaviorHints.publishDate, '2016-06-29T22:44:46.000Z');
   assert.equal(meta.behaviorHints.folderName, undefined);
 });
@@ -327,4 +335,102 @@ test('B2: pack sem files[] não ganha fileIdx chutado', () => {
   const stream = mapTorrent(pack, episodeContext);
   assert.equal(stream.fileIdx, undefined);
   assert.equal(stream.infoHash, HASH);
+});
+
+// --- Melhorias do formatter (relatório "formatter do AIOStreams") -------------
+
+const resolveUrl = 'https://guindex.example/resolve/abc';
+const rdOptions = { debridProvider: 'realdebrid', realDebridReady: true, viaDebrid: true };
+
+const dunaLegendado = {
+  title: 'Duna Parte Dois 2024 2160p WEB-DL HDR10 x265 Legendado (eng)',
+  original_title: 'Dune: Part Two',
+  details: 'https://torrentfilmeshds.example/duna-2',
+  audio: ['Inglês'],
+  magnet_link: magnet('Dune.Part.Two.2024.2160p.WEB-DL.DDP5.1.Atmos.HDR10.x265-FLUX'),
+  size: '22.4 GB',
+  files: [],
+  seed_count: 300,
+  indexer: 'torrentfilmeshds',
+};
+
+test('item 1: legendado sem PT no nome ganha Subs.PT-BR no filename', () => {
+  const meta = StreamService.createStreamMetadata(mapTorrent(dunaLegendado), resolveUrl, rdOptions);
+  assert.equal(meta.behaviorHints.filename, 'Dune.Part.Two.2024.2160p.WEB-DL.DDP5.1.Atmos.HDR10.x265-FLUX.Subs.PT-BR');
+  assert.deepEqual(meta.languages, ['English']);
+});
+
+test('item 1: LEGENDADO só na página também marca legenda; scene sem marca nenhuma não', () => {
+  assert.equal(filenameLanguageTag('Movie.2020.1080p.WEB-DL', ['English'], ['Movie (2020) Legendado']), 'Subs.PT-BR');
+  assert.equal(filenameLanguageTag('Movie.2020.1080p.WEB-DL', ['English'], ['Movie (2020)']), undefined);
+  assert.equal(filenameLanguageTag('Movie.2020.1080p.PT-BR.Subs', ['English'], ['Legendado']), undefined);
+  assert.equal(filenameLanguageTag('Movie.2020.1080p.Subs.PT-BR', ['English'], ['Legendado']), undefined);
+});
+
+test('item 5: português sem marca que o AIOStreams entenda ganha PT-BR', () => {
+  assert.equal(filenameLanguageTag('Cidade de Deus 2002 1080p Nacional', ['Portuguese']), 'PT-BR');
+  assert.equal(filenameLanguageTag('Movie.2020.1080p.WEB-DL', ['Portuguese', 'English']), 'PT-BR');
+  assert.equal(filenameLanguageTag('Movie.2020.1080p.DUAL.5.1', ['Portuguese', 'English']), undefined);
+  assert.equal(filenameLanguageTag('Movie 2020 1080p Dublado', ['Portuguese']), undefined);
+  assert.equal(filenameLanguageTag('Movie.2020.1080p.PT-BR', ['Portuguese']), undefined);
+});
+
+test('marca entra antes da extensão, no separador do nome', () => {
+  assert.equal(appendFilenameTag('Show.S01E02.1080p.mkv', 'PT-BR'), 'Show.S01E02.1080p.PT-BR.mkv');
+  assert.equal(appendFilenameTag('Tropa de Elite 2007 1080p', 'PT-BR'), 'Tropa de Elite 2007 1080p PT-BR');
+  assert.equal(appendFilenameTag('Movie.2020.1080p', undefined), 'Movie.2020.1080p');
+});
+
+test('item 1/5: a marca não muda rawFileName nem o nome de exibição', () => {
+  const stream = mapTorrent(dunaLegendado);
+  assert.equal(stream.rawFileName, 'Dune.Part.Two.2024.2160p.WEB-DL.DDP5.1.Atmos.HDR10.x265-FLUX');
+  assert.equal(stream.filenameLanguageTag, 'Subs.PT-BR');
+});
+
+test('item 2: runtime do Cinemeta vira behaviorHints.duration em segundos', () => {
+  const parser = provider.parser;
+  assert.equal(parser.extractRuntimeSeconds({ runtime: '152 min' }), 152 * 60);
+  assert.equal(parser.extractRuntimeSeconds({ runtime: '2h 32min' }), 152 * 60);
+  assert.equal(parser.extractRuntimeSeconds({ runtime: '1h' }), 3600);
+  assert.equal(parser.extractRuntimeSeconds({ runtime: 'N/A' }), undefined);
+  assert.equal(parser.extractRuntimeSeconds({}), undefined);
+
+  const movie = mapTorrent(tropaDeElite, { ...movieContext, runtimeSeconds: 115 * 60 });
+  assert.equal(movie.durationSeconds, 115 * 60);
+  const meta = StreamService.createStreamMetadata(movie, resolveUrl, rdOptions);
+  assert.equal(meta.behaviorHints.duration, 115 * 60);
+});
+
+test('item 2: pack sem files[] não recebe a duração de um episódio', () => {
+  const context = { ...episodeContext, runtimeSeconds: 60 * 60 };
+  const pack = {
+    title: 'Show S01 1080p WEB-DL Dual Audio',
+    magnet_link: magnet('Show S01 1080p WEB-DL Dual Audio'),
+    size: '8 GB',
+    files: [],
+    seed_count: 10,
+  };
+  assert.equal(mapTorrent(pack, context).durationSeconds, undefined);
+
+  const withFiles = {
+    ...pack,
+    files: [1, 2, 3].map((n) => ({ path: `Show S01/Show.S01E0${n}.1080p.mkv`, size: '2 GB', size_bytes: 2 * GB })),
+  };
+  assert.equal(mapTorrent(withFiles, context).durationSeconds, 60 * 60);
+});
+
+test('item 4: indexer conhecido sai com nome legível, desconhecido cai para o site', () => {
+  assert.equal(mapTorrent({ ...tropaDeElite, indexer: 'bludv_ru' }).indexerLabel, 'BluDV');
+  assert.equal(mapTorrent({ ...tropaDeElite, indexer: 'comando_torrents' }).indexerLabel, 'Comando');
+  const unknown = mapTorrent({ ...tropaDeElite, indexer: 'novo_site', details: 'https://bludv.xyz/x' });
+  assert.equal(unknown.indexerLabel, 'BluDV');
+  assert.equal(unknown.indexer, 'novo_site');
+});
+
+test('item 7: size_bytes dos files[] vence o tamanho formatado', () => {
+  const files = provider.parser.extractFilesFromTorrent({
+    files: [{ path: 'a.mkv', size: '1.23 GB', size_bytes: 1320702444 }, { path: 'b.mkv', size: '700 MB' }],
+  });
+  assert.equal(files[0].size, 1320702444);
+  assert.equal(files[1].size, 700 * 1024 ** 2);
 });
