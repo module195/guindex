@@ -3,7 +3,15 @@
  * Implements only what we need for the addon.
  */
 
-import { request } from 'undici';
+import { getGlobalDispatcher, interceptors, request, type Dispatcher } from 'undici';
+
+/**
+ * undici 7 tirou `maxRedirections` do request(); o redirect agora é um interceptor.
+ * Compomos sobre o dispatcher global a cada chamada para continuar a respeitar
+ * um MockAgent/ProxyAgent definido com setGlobalDispatcher.
+ */
+const redirectDispatcher = (maxRedirections: number): Dispatcher =>
+  getGlobalDispatcher().compose(interceptors.redirect({ maxRedirections }));
 
 export type TorboxDownloadState =
   | 'downloading'
@@ -179,7 +187,7 @@ export class TorboxClient {
 
     const res = await request(url.toString(), {
       headers: this.headers(),
-      maxRedirections: 2,
+      dispatcher: redirectDispatcher(2),
       headersTimeout: this.requestTimeout,
       bodyTimeout: this.requestTimeout
     });
@@ -252,7 +260,7 @@ export class TorboxClient {
       headers: this.headers(),
       headersTimeout: this.requestTimeout,
       bodyTimeout: this.requestTimeout,
-      maxRedirections: 2
+      dispatcher: redirectDispatcher(2)
     });
     const locationHeader = res.headers['location'];
     const text = await res.body.text();

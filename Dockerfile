@@ -1,22 +1,23 @@
 # Multi-stage build for production
-FROM node:18-alpine AS builder
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci
+# Sem package-lock no repo: npm ci falharia, então usamos npm install
+RUN npm install --no-audit --no-fund
 
 COPY . .
 RUN mkdir -p public
 RUN npm run build
 
 # ── Production ─────────────────────────────────────────────
-FROM node:18-alpine AS production
+FROM node:22-alpine AS production
 
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci --only=production && npm cache clean --force
+RUN npm install --omit=dev --no-audit --no-fund && npm cache clean --force
 
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/public ./public

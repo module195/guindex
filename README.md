@@ -504,7 +504,7 @@ Magnets de qualquer addon passam pelo seu debrid automaticamente.
 |-----------|-----|
 | **TypeScript** | Linguagem principal |
 | **Fastify** | Servidor HTTP |
-| **Node.js 18+** | Runtime |
+| **Node.js 20.18+ (22 recomendado)** | Runtime |
 | **Undici** | Cliente HTTP para APIs debrid |
 | **Pino** | Logger estruturado |
 | **Zod** | Validacao de schemas |
