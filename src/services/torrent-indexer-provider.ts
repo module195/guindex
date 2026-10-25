@@ -35,6 +35,7 @@ import {
   WARM_EXTRA_QUERIES,
   REQUEST_BUDGET_MS,
   DEBRID_MARGIN_MS,
+  META_BUDGET_MS,
   MAX_CACHE_QUERIES,
   CACHE_TIMEOUT_MS,
   MULTI_GRACE_MS,
@@ -215,9 +216,9 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     const parsed = this.parser.parseId(id);
     const metaLookupId = parsed.imdbId ?? parsed.query ?? (id || '').split(':')[0] ?? id;
     const [meta, localizedTitlesRaw] = await Promise.all([
-      this.fetchCinemetaMeta(type, metaLookupId, forceFresh),
+      this.awaitWithin(this.fetchCinemetaMeta(type, metaLookupId, forceFresh), META_BUDGET_MS, undefined),
       parsed.imdbId
-        ? this.fetchLocalizedTitleCandidates(parsed.imdbId, forceFresh)
+        ? this.awaitWithin(this.fetchLocalizedTitleCandidates(parsed.imdbId, forceFresh), META_BUDGET_MS, [])
         : Promise.resolve<string[]>([]),
     ]);
     let displayTitles = this.parser.collectMetaTitles(meta);
@@ -230,7 +231,11 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
         // Evita chamada duplicada ao Cinemeta quando o lookup acima já foi o mesmo
         const fallback = metaLookupId === parsed.imdbId
           ? meta
-          : await this.fetchCinemetaMeta('series', parsed.imdbId, forceFresh);
+          : await this.awaitWithin(
+              this.fetchCinemetaMeta('series', parsed.imdbId, forceFresh),
+              Math.max(0, startedAt + META_BUDGET_MS - Date.now()),
+              undefined,
+            );
         if (fallback?.name) displayTitles.push(fallback.name);
         if (fallback?.aliases) displayTitles.push(...fallback.aliases);
       }

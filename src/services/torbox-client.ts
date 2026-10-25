@@ -74,7 +74,8 @@ export class TorboxClient {
   private readonly baseUrl: string;
   private readonly token: string;
   private readonly userAgent: string;
-  private readonly requestTimeout = 4000; // ms
+  // Chamadas de play (o player espera); a checagem de cache passa o próprio timeout
+  private readonly requestTimeout = 15000; // ms
 
   constructor(options: TorboxClientOptions) {
     this.token = options.token;

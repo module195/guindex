@@ -230,6 +230,9 @@ export const WARM_EXTRA_QUERIES = parseNonNegativeInt(
 // Orçamento do pedido inteiro, desde a chegada: busca + consulta de cache do debrid.
 // Fica 1 s abaixo dos 9 s que o AIOStreams dá ao GuIndex, para a rede e o túnel.
 export const REQUEST_BUDGET_MS = parsePositiveInt(process.env.TORRENT_INDEXER_REQUEST_BUDGET_MS, 8000);
+// Quanto esperar por Cinemeta/TMDB antes de buscar só com o IMDb e os títulos que já
+// chegaram; a consulta segue em segundo plano e enche o cache para o próximo pedido.
+export const META_BUDGET_MS = parsePositiveInt(process.env.TORRENT_INDEXER_META_BUDGET_MS, 1500);
 // Reserva, dentro do orçamento, para a consulta de cache do debrid depois da busca;
 // é também o máximo que o /stream espera por ela.
 export const DEBRID_MARGIN_MS = parseNonNegativeInt(process.env.TORRENT_INDEXER_DEBRID_MARGIN_MS, 1500);
