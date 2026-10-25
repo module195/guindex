@@ -248,7 +248,7 @@ export class StreamService {
       behaviorHints.fallbackMagnet = options.fallbackMagnet;
     }
 
-    const sourceLabelMeta = StreamService.pickIndexer(sourceStream, behaviorHints, url);
+    const sourceLabelMeta = StreamService.pickIndexer(sourceStream, behaviorHints);
     if (sourceLabelMeta) metadata.indexer = sourceLabelMeta;
 
     // O AIOStreams só lê estes campos de behaviorHints; no topo eles ficam invisíveis para seeders()/indexer()/age().
@@ -457,8 +457,7 @@ export class StreamService {
 
   private static pickIndexer(
     stream: SourceStream,
-    behaviorHints: StremioStreamBehaviorHints | undefined,
-    url: string
+    behaviorHints: StremioStreamBehaviorHints | undefined
   ): string | undefined {
     if (stream.indexer && stream.indexer.trim()) {
       return stream.indexer.trim();
@@ -473,10 +472,8 @@ export class StreamService {
       if (parts[0]) return parts[0];
     }
 
-    const host =
-      StreamService.extractHost(stream.detailUrl) ||
-      StreamService.extractHost(stream.url) ||
-      StreamService.extractHost(url);
+    // O link de resolve aponta para o próprio GuIndex, então o host dele nunca é o indexer.
+    const host = StreamService.extractHost(stream.detailUrl) || StreamService.extractHost(stream.url);
     if (host) return host;
 
     return undefined;

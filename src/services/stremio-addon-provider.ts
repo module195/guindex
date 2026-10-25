@@ -134,7 +134,8 @@ function normalizeStream(stream: SourceStream, providerLabel: string): SourceStr
     result.detailUrl = detailUrl;
   }
 
-  const source = pickSource(result.source, stream.name, lines, detailUrl);
+  // Sem fonte no texto do addon, o nome dele vira o indexer no AIOStreams.
+  const source = pickSource(result.source, stream.name, lines, detailUrl) || providerLabel;
   if (source) {
     result.source = source;
   }
