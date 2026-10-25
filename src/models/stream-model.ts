@@ -52,5 +52,7 @@ export interface StreamRequest {
     torboxToken?: string;
     token?: string;
     forceFresh?: boolean;
+    /** Origem pública do pedido; usada nos links de resolve quando BASE_URL não está definida. */
+    requestBaseUrl?: string;
   };
 }
