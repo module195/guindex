@@ -246,3 +246,79 @@ test('Real-Debrid sem a lista da conta: a resposta não fica guardada como defin
   assert.equal(result.streams[0].behaviorHints.realDebridReady, false);
   assert.equal(StreamController.cacheControlFor(result), 'no-store');
 });
+
+test('multi atrasado durante a busca: a resposta sai para quem pediu, mas não fica no cache', async () => {
+  let calls = 0;
+  SourceService.fetchStreamsFromAllSources = async () => {
+    calls++;
+    const n = calls;
+    // O multi termina enquanto a busca ainda espera o debrid
+    if (n === 1) setTimeout(() => notifyLateResults('movie', 'tt1000017'), 10);
+    return [stream(`m${n}`, '7'.repeat(40))];
+  };
+  RealDebridService.checkCachedInfoHashes = () => new Promise((resolve) => setTimeout(() => resolve(new Set()), 50));
+  const controller = new StreamController();
+
+  const first = await controller.handleStreamRequest(rdArgs('tt1000017'));
+  assert.ok(first.streams[0].title.includes('m1'), first.streams[0].title);
+  const second = await controller.handleStreamRequest(rdArgs('tt1000017'));
+  assert.equal(calls, 2, 'o pedido seguinte busca de novo');
+  assert.ok(second.streams[0].title.includes('m2'), second.streams[0].title);
+  await controller.handleStreamRequest(rdArgs('tt1000017'));
+  assert.equal(calls, 2, 'e a busca nova fica no cache');
+});
+
+test('multi atrasado durante a busca com o TorBox lento: a parcial não volta ao cache quando a consulta termina', async () => {
+  const hash = '8'.repeat(40);
+  let calls = 0;
+  SourceService.fetchStreamsFromAllSources = async () => {
+    calls++;
+    if (calls === 1) setTimeout(() => notifyLateResults('movie', 'tt1000018'), 10);
+    return [stream(`p${calls}`, hash)];
+  };
+  // Responde depois do prazo do pedido (orçamento 600 menos a folga)
+  TorboxService.checkCachedInfoHashes = (hashes, token, onAnswer) =>
+    new Promise((resolve) =>
+      setTimeout(() => {
+        onAnswer?.(hash, true);
+        resolve(availability([hash]));
+      }, 450)
+    );
+  const controller = new StreamController();
+
+  const first = await controller.handleStreamRequest(tbArgs('tt1000018'));
+  assert.equal(StreamController.cacheControlFor(first), 'no-store');
+  await sleep(100);
+  TorboxService.checkCachedInfoHashes = async () => availability([hash]);
+  const second = await controller.handleStreamRequest(tbArgs('tt1000018'));
+  assert.equal(calls, 2, 'o pedido seguinte busca de novo, sem sair da resposta desatualizada');
+  assert.ok(second.streams[0].title.includes('p2'), second.streams[0].title);
+});
+
+test('busca nova parcial atrás de uma completa ainda válida: a substitui quando a consulta do TorBox termina', async () => {
+  const hash = '9a'.repeat(20);
+  let version = 'v1';
+  SourceService.fetchStreamsFromAllSources = async () => [stream(version, hash)];
+  TorboxService.checkCachedInfoHashes = async () => availability([hash]);
+  const controller = new StreamController();
+  await controller.handleStreamRequest(tbArgs('tt1000019'));
+
+  await sleep(80);
+  version = 'v2';
+  TorboxService.checkCachedInfoHashes = (hashes, token, onAnswer) =>
+    new Promise((resolve) =>
+      setTimeout(() => {
+        onAnswer?.(hash, true);
+        resolve(availability([hash]));
+      }, 500)
+    );
+  const stale = await controller.handleStreamRequest(tbArgs('tt1000019'));
+  assert.ok(stale.streams[0].title.includes('v1'), stale.streams[0].title);
+
+  // A busca v2 sai parcial perto de 400ms e não substitui a v1; a consulta termina
+  // em 500ms e a v2, completa, entra no lugar dela
+  await sleep(600);
+  const after = await controller.handleStreamRequest(tbArgs('tt1000019'));
+  assert.ok(after.streams[0].title.includes('v2'), after.streams[0].title);
+  assert.equal(after.streams[0].behaviorHints.cached, true);
+});

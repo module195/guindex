@@ -266,6 +266,67 @@ test('TorBox: consulta que trava depois que outro pedido entrou nela abre outra 
   }
 });
 
+test('TorBox: a segunda consulta não sai para hash que outra chave já respondeu', async () => {
+  const hash = '6a'.repeat(20);
+  const shareMs = TorboxService.IN_FLIGHT_SHARE_MS;
+  TorboxService.IN_FLIGHT_SHARE_MS = 60;
+  try {
+    let calls = 0;
+    const onlyThisHash = { path: (p) => p.startsWith('/v1/api/torrents/checkcached') && p.includes(hash), method: 'GET' };
+    const reply = () => {
+      calls++;
+      return { statusCode: 200, data: { success: true, data: [{ hash }] } };
+    };
+    torbox.intercept(onlyThisHash).reply(reply).delay(1500);
+    torbox.intercept(onlyThisHash).reply(reply);
+    torbox.intercept(onlyThisHash).reply(reply);
+
+    const started = Date.now();
+    const stuck = TorboxService.checkCachedInfoHashes([hash], 'token-presa-a');
+    await sleep(10);
+    const other = await TorboxService.checkCachedInfoHashes([hash], 'token-outra-b');
+    assert.deepEqual([...other.cached], [hash]);
+    const result = await stuck;
+    assert.ok(Date.now() - started < 500, `a consulta presa esperou ${Date.now() - started}ms`);
+    assert.deepEqual([...result.cached], [hash], 'vale a resposta que a outra chave trouxe');
+    await sleep(50);
+    assert.equal(calls, 2, 'sem uma terceira consulta para o hash já respondido');
+  } finally {
+    TorboxService.IN_FLIGHT_SHARE_MS = shareMs;
+  }
+});
+
+test('TorBox: a segunda consulta não sai depois que a consulta antiga respondeu o lote', async () => {
+  const hash = '7a'.repeat(20);
+  const shareMs = TorboxService.IN_FLIGHT_SHARE_MS;
+  TorboxService.IN_FLIGHT_SHARE_MS = 100;
+  try {
+    let calls = 0;
+    const onlyThisHash = { path: (p) => p.startsWith('/v1/api/torrents/checkcached') && p.includes(hash), method: 'GET' };
+    const reply = () => {
+      calls++;
+      return { statusCode: 200, data: { success: true, data: [{ hash }] } };
+    };
+    // 1ª consulta responde em 280ms; a segunda dela (aos 100ms) e a do pedido que
+    // chega aos 230ms ficam presas
+    torbox.intercept(onlyThisHash).reply(reply).delay(280);
+    torbox.intercept(onlyThisHash).reply(reply).delay(1500);
+    torbox.intercept(onlyThisHash).reply(reply).delay(1500);
+    torbox.intercept(onlyThisHash).reply(reply);
+
+    const first = TorboxService.checkCachedInfoHashes([hash], 'token-velha');
+    await sleep(230);
+    const late = await TorboxService.checkCachedInfoHashes([hash], 'token-velha');
+    assert.deepEqual([...late.cached], [hash]);
+    assert.deepEqual([...(await first).cached], [hash]);
+    // A segunda do pedido tardio sairia aos 330ms
+    await sleep(150);
+    assert.equal(calls, 3, 'a 1ª, a segunda dela e a do pedido tardio; nenhuma outra depois da resposta');
+  } finally {
+    TorboxService.IN_FLIGHT_SHARE_MS = shareMs;
+  }
+});
+
 test('TorBox: item malformado no checkcached não derruba a consulta', async () => {
   const hash = '4a'.repeat(20);
   torbox.intercept(checkcached).reply(200, { success: true, data: [null, { hash: 123 }, 'x', { hash }] });

@@ -251,7 +251,8 @@ export class RealDebridService {
     return result;
   }
 
-  private static async getAccountDownloadedTorrents(token: string): Promise<Map<string, string> | undefined> {
+  /** Lista da conta já em memória, sem consultar o Real-Debrid; `undefined` se não houver. */
+  static knownAccountTorrents(token: string): Map<string, string> | undefined {
     const now = Date.now();
     const cached = this.accountHashesCache.get(token);
     if (cached && cached.expires > now) {
@@ -261,6 +262,14 @@ export class RealDebridService {
     const disabledUntil = this.accountTorrentsDisabledUntil.get(token);
     if (disabledUntil !== undefined && now < disabledUntil) {
       return new Map();
+    }
+    return undefined;
+  }
+
+  private static async getAccountDownloadedTorrents(token: string): Promise<Map<string, string> | undefined> {
+    const known = this.knownAccountTorrents(token);
+    if (known) {
+      return known;
     }
 
     const inFlight = this.accountHashesInFlight.get(token);
