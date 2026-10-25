@@ -35,12 +35,126 @@ export async function finishesWithin(promise: Promise<unknown>, ms: number): Pro
   }
 }
 
+const parseNonNegativeInt = (value: string | undefined, fallback: number): number => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? Math.floor(parsed) : fallback;
+};
+
+// Cache da resposta inteira do /stream. Dentro de STREAM_CACHE_TTL_MS a resposta
+// sai do cache; depois disso, até STREAM_CACHE_STALE_MS, sai a versão antiga na
+// hora e uma busca nova roda em segundo plano (stale-while-revalidate). Se a busca
+// nova voltar vazia, a antiga continua valendo (stale-if-error).
+const STREAM_CACHE_TTL_MS = parseNonNegativeInt(process.env.STREAM_CACHE_TTL_MS, 2 * 60 * 1000);
+const STREAM_CACHE_STALE_MS = parseNonNegativeInt(process.env.STREAM_CACHE_STALE_MS, 30 * 60 * 1000);
+const STREAM_CACHE_MAX_ENTRIES = 500;
+
+interface StreamCacheEntry {
+  response: StreamResponse;
+  freshUntil: number;
+  staleUntil: number;
+}
+
 export class StreamController {
+  private static streamCache = new Map<string, StreamCacheEntry>();
+  private static streamRefreshInFlight = new Map<string, Promise<StreamResponse>>();
+  /** hash + contexto de cada stream entregue, para reaplicar o filtro de bloqueio do RD no cache */
+  private static streamOrigins = new WeakMap<StremioStream, { hash: string; context?: StreamContext }>();
+  /** Respostas montadas sem a checagem de cache do debrid; não entram no cache */
+  private static partialResponses = new WeakSet<StreamResponse>();
+
+
   private config = ConfigService.loadConfig();
   private readonly resolveBaseUrl = this.config.baseUrl;
   private readonly torboxStreamLimit = this.config.torboxStreamLimit ?? 12;
 
   async handleStreamRequest(args: StreamRequest): Promise<StreamResponse> {
+    if (STREAM_CACHE_TTL_MS === 0) {
+      return this.computeStreams(args);
+    }
+
+    const key = this.streamCacheKey(args);
+    const now = Date.now();
+    const cached = StreamController.streamCache.get(key);
+    if (cached && !args.extra?.forceFresh) {
+      if (now < cached.freshUntil) {
+        console.info(`[GuIndex] ♻️ Stream do cache: ${args.type}/${args.id}`);
+        return this.withoutBlocked(cached.response);
+      }
+      if (now < cached.staleUntil) {
+        console.info(`[GuIndex] ♻️ Stream do cache (antigo, atualizando em segundo plano): ${args.type}/${args.id}`);
+        void this.refreshStreams(key, args).catch(() => undefined);
+        return this.withoutBlocked(cached.response);
+      }
+    }
+
+    const response = await this.refreshStreams(key, args);
+    if (response.streams.length === 0 && cached && now < cached.staleUntil) {
+      console.info(`[GuIndex] ♻️ Busca nova voltou vazia; mantendo a resposta anterior: ${args.type}/${args.id}`);
+      return this.withoutBlocked(cached.response);
+    }
+    return response;
+  }
+
+  /**
+   * Cache-Control da resposta do /stream. É `private` porque os links de resolve
+   * levam o token do usuário; vazio ou sem a checagem do debrid não fica guardado.
+   */
+  static cacheControlFor(response: StreamResponse): string {
+    if (STREAM_CACHE_TTL_MS === 0 || response.streams.length === 0 || StreamController.partialResponses.has(response)) {
+      return 'no-store';
+    }
+    const maxAge = Math.floor(STREAM_CACHE_TTL_MS / 1000);
+    const stale = Math.floor(Math.max(0, STREAM_CACHE_STALE_MS - STREAM_CACHE_TTL_MS) / 1000);
+    return `private, max-age=${maxAge}, stale-while-revalidate=${stale}, stale-if-error=${stale}`;
+  }
+
+  private streamCacheKey(args: StreamRequest): string {
+    const { type, id, extra } = args;
+    const token = extra?.token ?? extra?.realdebridToken ?? extra?.torboxToken ?? '';
+    return [type, id, extra?.debridProvider ?? '', token, extra?.requestBaseUrl ?? ''].join('|');
+  }
+
+  /** Uma busca por chave; resultado não vazio entra no cache. */
+  private refreshStreams(key: string, args: StreamRequest): Promise<StreamResponse> {
+    const inFlight = StreamController.streamRefreshInFlight.get(key);
+    if (inFlight) {
+      return inFlight;
+    }
+    const pending = this.computeStreams(args)
+      .then((response) => {
+        // Resposta sem a checagem do debrid (orçamento estourado) não entra: o próximo
+        // pedido já encontra a disponibilidade pronta e deve refletir isso.
+        if (response.streams.length > 0 && !StreamController.partialResponses.has(response)) {
+          const cache = StreamController.streamCache;
+          cache.delete(key);
+          if (cache.size >= STREAM_CACHE_MAX_ENTRIES) {
+            const oldest = cache.keys().next().value;
+            if (oldest !== undefined) cache.delete(oldest);
+          }
+          const now = Date.now();
+          cache.set(key, {
+            response,
+            freshUntil: now + STREAM_CACHE_TTL_MS,
+            staleUntil: now + Math.max(STREAM_CACHE_TTL_MS, STREAM_CACHE_STALE_MS)
+          });
+        }
+        return response;
+      })
+      .finally(() => StreamController.streamRefreshInFlight.delete(key));
+    StreamController.streamRefreshInFlight.set(key, pending);
+    return pending;
+  }
+
+  /** Tira do cache os streams que o RD bloqueou depois que a resposta foi guardada. */
+  private withoutBlocked(response: StreamResponse): StreamResponse {
+    const streams = response.streams.filter((stream) => {
+      const origin = StreamController.streamOrigins.get(stream);
+      return !origin || !RealDebridService.isBlocked(origin.hash, origin.context);
+    });
+    return streams.length === response.streams.length ? response : { streams };
+  }
+
+  private async computeStreams(args: StreamRequest): Promise<StreamResponse> {
     const { type, id, extra } = args;
     const requestStartedAt = Date.now();
 
@@ -151,6 +265,9 @@ export class StreamController {
           });
 
           const meta = StreamService.createStreamMetadata(stream, resolveUrl, commonOptions);
+          if (hash) {
+            StreamController.streamOrigins.set(meta, { hash, context: stream.context });
+          }
           return meta;
         })
         .filter((stream): stream is StremioStream => Boolean(stream));
@@ -180,7 +297,11 @@ export class StreamController {
       });
 
       console.info(`[GuIndex] 📤 Entrega final: ${streamMetadata.length} streams formatados enviados ao Stremio`);
-      return { streams: streamMetadata };
+      const response = { streams: streamMetadata };
+      if (selectedToken && !availabilityDone) {
+        StreamController.partialResponses.add(response);
+      }
+      return response;
       
     } catch (error) {
       console.error(`Stream processing error: ${error instanceof Error ? error.message : 'Unknown error'}`);
