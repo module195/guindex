@@ -253,6 +253,35 @@ test('multi atrasado que só repete o que o teto por fonte cortou do cache não 
   assert.deepEqual(late, [], 'a busca seguinte também o cortaria');
 });
 
+test('multi atrasado com a cópia certa de um torrent que o cache tinha com ano errado avisa', async (t) => {
+  const srv = await startServer({
+    '/sources': async () => [200, SOURCES_V2],
+    '/search': async (url) => [200, {
+      results: url.searchParams.get('q') === IMDB
+        ? [
+            torrent(hash('a'), 'Matrix 1999 1080p', 'betor'),
+            torrent(hash('b'), 'Matrix 1999 720p', 'comando_torrents'),
+            { ...torrent(hash('c'), 'Matrix 2009 2160p', 'betor'), year: '2009' },
+          ]
+        : [],
+    }],
+    '/indexers/multi': async () => {
+      await sleep(1400);
+      return [200, multiPayload([{ ...torrent(hash('c'), 'Matrix 1999 2160p', 'betor'), found_in: ['betor'] }])];
+    },
+  });
+  t.after(srv.close);
+  const late = [];
+  const stop = onLateResults((type, id, hashes) => late.push(hashes));
+  t.after(stop);
+  const provider = new TorrentIndexerProvider('GuIndex', srv.base);
+
+  const streams = await provider.getStreams('movie', IMDB);
+  assert.equal(streams.length, 2, 'a cópia do cache com ano errado fica de fora');
+  await sleep(900);
+  assert.deepEqual(late, [[hash('c')]], 'a cópia certa do multi conta como nova');
+});
+
 test('multi atrasado com torrent que o cache não tinha avisa mesmo com o teto por fonte cheio', async (t) => {
   const srv = await startServer({
     '/sources': async () => [200, SOURCES_V2],

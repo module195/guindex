@@ -437,7 +437,13 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     void multiPromise
       .then((late) => {
         if (!late || late.length === 0) return;
-        const inCache = new Set(cacheTorrents.map((torrent) => this.parser.getTorrentDedupKey(torrent)));
+        // Só o que a Fase 1 aceitou: uma cópia do cache recusada (ano ou imdb
+        // errado, sem magnet) não impede a cópia certa que o multi trouxe.
+        const inCache = new Set(
+          cacheTorrents
+            .filter((torrent) => this.parser.isRelevantTorrent(torrent, context) && this.mapTorrentToStream(torrent, fallbackTitle, context))
+            .map((torrent) => this.parser.getTorrentDedupKey(torrent)),
+        );
         const unseen = late.filter((torrent) => {
           const key = this.parser.getTorrentDedupKey(torrent);
           return !key || !inCache.has(key);
