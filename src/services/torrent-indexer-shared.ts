@@ -227,9 +227,11 @@ export const WARM_EXTRA_QUERIES = parseNonNegativeInt(
   process.env.TORRENT_INDEXER_WARM_EXTRA_QUERIES,
   0,
 );
-// Orçamento da busca por pedido, desde a chegada (o AIOStreams costuma dar 10 s ao addon).
-export const REQUEST_BUDGET_MS = parsePositiveInt(process.env.TORRENT_INDEXER_REQUEST_BUDGET_MS, 8500);
-// Reserva, dentro do orçamento, para a consulta de cache do debrid depois da busca.
+// Orçamento do pedido inteiro, desde a chegada: busca + consulta de cache do debrid.
+// Fica 1 s abaixo dos 9 s que o AIOStreams dá ao GuIndex, para a rede e o túnel.
+export const REQUEST_BUDGET_MS = parsePositiveInt(process.env.TORRENT_INDEXER_REQUEST_BUDGET_MS, 8000);
+// Reserva, dentro do orçamento, para a consulta de cache do debrid depois da busca;
+// é também o máximo que o /stream espera por ela.
 export const DEBRID_MARGIN_MS = parseNonNegativeInt(process.env.TORRENT_INDEXER_DEBRID_MARGIN_MS, 1500);
 // Fase 1: quantas queries vão ao Meilisearch (uma chamada /search por query, em paralelo).
 export const MAX_CACHE_QUERIES = parsePositiveInt(process.env.TORRENT_INDEXER_CACHE_MAX_QUERIES, 8);

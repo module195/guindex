@@ -16,6 +16,20 @@ import { TorboxClient, type TorboxFile, type TorboxTorrent, type TorboxWebDl } f
 
 type AvailabilityCacheEntry = { cached: boolean; expires: number };
 
+/** Resultado da checagem de cache: `unknown` são os hashes cuja consulta falhou. */
+export interface TorboxAvailability {
+  cached: Set<string>;
+  unknown: Set<string>;
+}
+
+// Timeout da consulta ao checkcached. Fica bem acima do que o /stream espera por
+// ela: quem pediu desiste no próprio prazo, e a consulta termina em segundo plano
+// e enche o cache de disponibilidade para o próximo pedido.
+const CHECK_CACHED_TIMEOUT_MS = (() => {
+  const parsed = Number.parseInt(process.env.TORBOX_CHECKCACHED_TIMEOUT_MS ?? '', 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 15_000;
+})();
+
 // ── Constants ────────────────────────────────────────────────────────────────
 const MIN_VIDEO_BYTES = 5 * 1024 * 1024; // 5 MB – anything smaller is junk
 
@@ -38,6 +52,7 @@ export interface TorboxDirectResult {
 export class TorboxService {
   private static readonly INSTANT_AVAILABILITY_TTL_MS = 5 * 60 * 1000; // 5 min
   private static availabilityCache = new Map<string, AvailabilityCacheEntry>();
+  private static availabilityInFlight = new Map<string, Promise<boolean | undefined>>();
   private static readonly CHECK_CACHED_CHUNK = 90;
   /**
    * Torrents da conta por token (hash minúsculo → id). Reaproveitar o torrent
@@ -58,55 +73,79 @@ export class TorboxService {
 
   // ---------- Instant availability ----------
   static async fetchCachedInfoHashes(hashes: string[], token?: string): Promise<Set<string>> {
-    const result = new Set<string>();
+    return (await this.checkCachedInfoHashes(hashes, token)).cached;
+  }
+
+  /**
+   * Consulta o checkcached (sem lista de arquivos, que deixa a resposta lenta).
+   * Hash já em consulta por outro pedido aguarda a mesma consulta em vez de
+   * abrir outra.
+   */
+  static async checkCachedInfoHashes(hashes: string[], token?: string): Promise<TorboxAvailability> {
+    const cached = new Set<string>();
+    const unknown = new Set<string>();
     if (!token || hashes.length === 0) {
-      return result;
+      return { cached, unknown };
     }
 
-    const normalized = hashes
-      .map((h) => h?.toLowerCase())
-      .filter((h): h is string => Boolean(h));
+    const normalized = [
+      ...new Set(hashes.map((h) => h?.toLowerCase()).filter((h): h is string => Boolean(h))),
+    ];
 
     const now = Date.now();
+    const pending = new Map<string, Promise<boolean | undefined>>();
     const toFetch: string[] = [];
     for (const h of normalized) {
       const cache = this.availabilityCache.get(h);
       if (cache && cache.expires > now) {
-        if (cache.cached) result.add(h);
+        if (cache.cached) cached.add(h);
+        continue;
+      }
+      const inFlight = this.availabilityInFlight.get(h);
+      if (inFlight) {
+        pending.set(h, inFlight);
         continue;
       }
       toFetch.push(h);
     }
 
-    if (toFetch.length === 0) return result;
-
     // O checkcached aceita cerca de 100 hashes por consulta; o guindex junta até 240.
-    const client = new TorboxClient({ token });
-    const chunks: string[][] = [];
-    for (let i = 0; i < toFetch.length; i += TorboxService.CHECK_CACHED_CHUNK) {
-      chunks.push(toFetch.slice(i, i + TorboxService.CHECK_CACHED_CHUNK));
-    }
-    const settled = await Promise.allSettled(chunks.map((chunk) => client.checkTorrentsCached(chunk, true)));
-    settled.forEach((outcome, index) => {
-      const chunk = chunks[index] ?? [];
-      if (outcome.status === 'rejected') {
-        console.warn(`[TorBox] checkcached falhou (${chunk.length} hashes):`, outcome.reason);
-        return;
-      }
-      const cachedSet = new Set<string>();
-      for (const item of outcome.value ?? []) {
-        const h = (item.hash ?? '').toLowerCase();
-        const hasFiles = !!item.files && item.files.length > 0;
-        const flaggedCached = (item as any).cached === true;
-        if (h && (hasFiles || flaggedCached)) {
-          cachedSet.add(h);
+    if (toFetch.length > 0) {
+      const client = new TorboxClient({ token });
+      for (let i = 0; i < toFetch.length; i += TorboxService.CHECK_CACHED_CHUNK) {
+        const chunk = toFetch.slice(i, i + TorboxService.CHECK_CACHED_CHUNK);
+        const lookup = client.checkTorrentsCached(chunk, false, CHECK_CACHED_TIMEOUT_MS).then(
+          (items) => {
+            const found = new Set<string>();
+            for (const item of items) {
+              const h = (item.hash ?? '').toLowerCase();
+              if (h && (item as { cached?: unknown }).cached !== false) found.add(h);
+            }
+            this.updateAvailabilityCache(chunk, found, Date.now());
+            return found;
+          },
+          (error) => {
+            console.warn(`[TorBox] checkcached falhou (${chunk.length} hashes):`, error);
+            return undefined;
+          }
+        );
+        for (const h of chunk) {
+          const answer = lookup.then((found) => (found ? found.has(h) : undefined));
+          this.availabilityInFlight.set(h, answer);
+          pending.set(h, answer);
+          void answer.then(() => {
+            if (this.availabilityInFlight.get(h) === answer) this.availabilityInFlight.delete(h);
+          });
         }
       }
-      this.updateAvailabilityCache(chunk, cachedSet, now);
-      cachedSet.forEach((h) => result.add(h));
-    });
+    }
 
-    return result;
+    for (const [h, answer] of pending) {
+      const isCached = await answer;
+      if (isCached === undefined) unknown.add(h);
+      else if (isCached) cached.add(h);
+    }
+    return { cached, unknown };
   }
 
   private static updateAvailabilityCache(hashes: string[], cached: Set<string>, now: number): void {

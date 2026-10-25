@@ -5,6 +5,7 @@
 import { request } from 'undici';
 import { BaseSourceProvider, type SourceFetchOptions } from './base-source-provider.js';
 import type { SourceStream } from '../models/source-model.js';
+import { DEBRID_MARGIN_MS, REQUEST_BUDGET_MS } from './torrent-indexer-shared.js';
 
 const FILE_EXT_REGEX = /\.(mkv|mp4|avi|m4v|ts|m2ts|iso|mpg|mpeg|wmv|mov|rar|zip)\b/i;
 const RESOLUTION_REGEX = /\b(2160p|1440p|1080p|720p|576p|480p|360p|240p)\b/i;
@@ -60,20 +61,12 @@ const parsePositiveInt = (value: string | undefined, fallback: number): number =
   const parsed = Number.parseInt(value ?? '', 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 };
-const parseNonNegativeInt = (value: string | undefined, fallback: number): number => {
-  const parsed = Number.parseInt(value ?? '', 10);
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
-};
 
 // Padrão: o mesmo prazo da busca do GuIndex (orçamento do pedido menos a margem
 // do debrid), para um addon lento não segurar a resposta inteira.
 const ADDON_TIMEOUT_MS = parsePositiveInt(
   process.env.STREMIO_ADDON_TIMEOUT_MS,
-  Math.max(
-    1000,
-    parsePositiveInt(process.env.TORRENT_INDEXER_REQUEST_BUDGET_MS, 8500) -
-      parseNonNegativeInt(process.env.TORRENT_INDEXER_DEBRID_MARGIN_MS, 1500),
-  ),
+  Math.max(1000, REQUEST_BUDGET_MS - DEBRID_MARGIN_MS),
 );
 
 export class StremioAddonProvider extends BaseSourceProvider {

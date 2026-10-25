@@ -81,8 +81,10 @@ Stremio/AIOStreams
        │         ├── Year validation (filmes)
        │         └── Deduplicacao por info_hash
        │
-       ├──── Debrid cache check
-       │         ├── TorBox: /api/torrents/checkcached
+       ├──── Debrid cache check (no /stream, no maximo TORRENT_INDEXER_DEBRID_MARGIN_MS)
+       │         ├── TorBox: /api/torrents/checkcached (sem lista de arquivos; um hash
+       │         │     ja em consulta reaproveita a mesma; sem resposta a tempo, segue
+       │         │     em segundo plano e o stream sai como ⏳)
        │         └── Real-Debrid: torrents já baixados na conta (/torrents)
        │
        └──── Retorna streams formatados para Stremio
@@ -98,13 +100,13 @@ Stremio/AIOStreams
    - `{titulo} temporada {n}`
    - `{titulo_pt} S{xx}E{yy}` (titulo localizado)
    - IMDB ID (so para indexers que suportam)
-4. **Busca em 3 fases**, dentro de `TORRENT_INDEXER_REQUEST_BUDGET_MS` (8,5 s desde a chegada do pedido, menos `TORRENT_INDEXER_DEBRID_MARGIN_MS` para o debrid):
+4. **Busca em 3 fases**, dentro de `TORRENT_INDEXER_REQUEST_BUDGET_MS` (8 s desde a chegada do pedido, menos `TORRENT_INDEXER_DEBRID_MARGIN_MS` para o debrid):
    - **Fase 1 (cache)**: `/search` no Meilisearch, uma chamada por query em paralelo (o `/search` le so o primeiro `q`). Ao mesmo tempo dispara o `/indexers/multi`
    - **Fase 2 (multi)**: `/indexers/multi` com IMDb + titulo PT + titulo original. Com cache suficiente, espera so uma janela curta; com cache fraco, espera ate o prazo. Os resultados das duas fases sao juntados
    - **Fase 3 (indexers mais rapidos)**: se nada veio, `/indexers/{nome}` nos indexers mais rapidos pelo historico, com as queries de texto que o multi nao cobriu (ou tambem as do multi, se ele nao respondeu)
 5. **Filtro de relevancia** — `isRelevantTorrent()` descarta resultados com titulo errado, temporada/episodio divergente, ou ano incompativel
 6. **Ranking** — Ordena por qualidade (1080p > 720p), idioma (Dual > PT > EN), e seeds
-7. **Debrid check** — Verifica cache no TorBox/RD para indicar ⚡ ou ⏳. Usa so o que sobrou do orcamento de 8,5 s; se a resposta do debrid nao chegar a tempo, os streams saem como nao cacheados e o resultado da consulta fica no cache para o proximo pedido
+7. **Debrid check** — Feito no `/stream`, depois da busca: verifica cache no TorBox/RD para indicar ⚡ ou ⏳, esperando no maximo `TORRENT_INDEXER_DEBRID_MARGIN_MS` (1,5 s) e sem passar do orcamento. Se o debrid nao responder a tempo, os streams saem como nao cacheados; a consulta termina em segundo plano (`TORBOX_CHECKCACHED_TIMEOUT_MS`) e fica no cache de disponibilidade. Essa resposta nao fica guardada como definitiva: o proximo pedido sai dela na hora e refaz a busca em segundo plano, ja com o selo
 8. **Resposta** — Retorna `SourceStream[]` formatados com titulo, qualidade, idioma e badges
 
 ### Mapa de indexers
@@ -357,8 +359,8 @@ npm start
 | Variavel | Padrao | Descricao |
 |----------|--------|-----------|
 | `STREMIO_ADDON_SOURCES` | `[]` | Lista JSON de addons extras no formato `[{"name":"Name","url":"https://example.com/manifest.json"}]` (opcional) |
-| `STREMIO_ADDON_TIMEOUT_MS` | orçamento − margem do debrid (7000) | Prazo do pedido a cada addon externo; passou disso, o addon é cortado e os outros streams seguem |
-| `SOURCE_TIMEOUT_MS` | `TORRENT_INDEXER_REQUEST_BUDGET_MS` (8500) | Prazo de cada fonte no agregador; `0` desliga |
+| `STREMIO_ADDON_TIMEOUT_MS` | orçamento − margem do debrid (6500) | Prazo do pedido a cada addon externo; passou disso, o addon é cortado e os outros streams seguem |
+| `SOURCE_TIMEOUT_MS` | `TORRENT_INDEXER_REQUEST_BUDGET_MS` (8000) | Prazo de cada fonte no agregador; `0` desliga |
 | `RD_BLOCKED_TTL_MS` | `86400000` (24 h) | Por quanto tempo um arquivo recusado pelo Real-Debrid (infringing_file) fica escondido; `0` desliga |
 | `STREAM_CACHE_TTL_MS` | `120000` (2 min) | Por quanto tempo a resposta do `/stream` sai do cache sem nova busca; `0` desliga o cache |
 | `STREAM_CACHE_STALE_MS` | `1800000` (30 min) | Até quando a resposta antiga ainda é entregue na hora enquanto uma busca nova roda em segundo plano |
@@ -422,6 +424,7 @@ npm start
 |----------|--------|-----------|
 | `TORBOX_WAIT_VIDEO_URL` | — | Video de espera enquanto TorBox processa |
 | `TORBOX_STREAM_LIMIT` | `15` | Limite de streams TorBox (o melhor de cada qualidade sempre entra) |
+| `TORBOX_CHECKCACHED_TIMEOUT_MS` | `15000` | Timeout da consulta de cache no TorBox. O `/stream` espera por ela so `TORRENT_INDEXER_DEBRID_MARGIN_MS`; o resto roda em segundo plano e enche o cache de disponibilidade |
 
 ### Perfil recomendado para VPS
 
@@ -484,7 +487,7 @@ O arquivo `aiostreams-config-exemplo.json` contem uma configuracao de referencia
 Ajustes que fazem diferenca no AIOStreams:
 
 - **GuIndex no topo da lista de addons.** Quando dois addons trazem o mesmo torrent, o deduplicador fica com o do addon que vem antes. Com o GuIndex embaixo, expressoes como `addon(streams, 'GuIndex')` e o preload deixam de achar os streams dele.
-- **Timeout de 9000 ms.** O GuIndex responde dentro de `TORRENT_INDEXER_REQUEST_BUDGET_MS` (8,5 s), contando a consulta de cache do debrid; o resto fica para o AIOStreams filtrar e ordenar antes dos ~10 s do Stremio.
+- **Timeout de 9000 ms.** O GuIndex responde dentro de `TORRENT_INDEXER_REQUEST_BUDGET_MS` (8 s), contando a consulta de cache do debrid; sobra 1 s para a rede e o tunel ate o AIOStreams, que filtra e ordena antes dos ~10 s do Stremio. Com um timeout menor no AIOStreams, baixe o orcamento junto.
 - **Indexer com `keyword`, nao `indexer()`.** O GuIndex envia em `behaviorHints.indexer` o nome do indexer no torrent-indexer (`betor`, `comando_torrents`, `rede_torrent`, `torrent-dos-filmes`, `bludv_ru`, `baixarapido`, `torrentfilmeshds`). `indexer()` compara o texto exato; `keyword(streams, 'indexer', 'bludv', 'comando', ...)` ignora maiusculas e aceita `bludv_ru` e `comando_torrents`.
 - **Fora do Service Wrap.** O GuIndex ja consulta o cache do TorBox/Real-Debrid. Com "Reconfigure Service" ligado para todos os addons, o AIOStreams consulta de novo os mesmos hashes; deixe o GuIndex fora da lista de addons do Service Wrap.
 

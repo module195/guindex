@@ -90,7 +90,11 @@ export class TorboxClient {
     };
   }
 
-  private async get<T>(path: string, search?: Record<string, string | number | boolean | string[]>): Promise<T> {
+  private async get<T>(
+    path: string,
+    search?: Record<string, string | number | boolean | string[]>,
+    timeoutMs = this.requestTimeout
+  ): Promise<T> {
     const url = new URL(this.baseUrl + path);
     if (search) {
       for (const [key, value] of Object.entries(search)) {
@@ -105,8 +109,8 @@ export class TorboxClient {
 
     const res = await request(url.toString(), {
       headers: this.headers(),
-      headersTimeout: this.requestTimeout,
-      bodyTimeout: this.requestTimeout
+      headersTimeout: timeoutMs,
+      bodyTimeout: timeoutMs
     });
     const bodyText = await res.body.text();
 
@@ -151,13 +155,25 @@ export class TorboxClient {
     return (parsed.data ?? (parsed as unknown as T)) as T;
   }
 
-  async checkTorrentsCached(hashes: string[], listFiles = true): Promise<CheckCachedItem[]> {
+  /**
+   * Hashes cacheados no TorBox; os que não estão no cache não voltam na lista.
+   * `timeoutMs` substitui o timeout padrão (a checagem pode rodar em segundo plano).
+   */
+  async checkTorrentsCached(hashes: string[], listFiles = false, timeoutMs?: number): Promise<CheckCachedItem[]> {
     if (!hashes.length) return [];
-    return this.get<CheckCachedItem[]>('/v1/api/torrents/checkcached', {
-      hash: hashes,
-      format: 'list',
-      list_files: listFiles
-    });
+    const data = await this.get<CheckCachedItem[] | Record<string, CheckCachedItem> | null>(
+      '/v1/api/torrents/checkcached',
+      {
+        hash: hashes,
+        format: 'list',
+        list_files: listFiles
+      },
+      timeoutMs
+    );
+    if (Array.isArray(data)) return data;
+    if (!data || typeof data !== 'object') return [];
+    // format=object: chave é o hash
+    return Object.entries(data).map(([hash, item]) => ({ hash, ...(item ?? {}) }));
   }
 
   async createTorrent(magnet: string): Promise<{ torrent_id: number; hash: string }> {

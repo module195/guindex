@@ -10,20 +10,25 @@ process.env.STREAM_CACHE_STALE_MS = '10000';
 const { StreamController } = await import('../dist/controllers/stream-controller.js');
 const { SourceService } = await import('../dist/services/source-service.js');
 const { RealDebridService } = await import('../dist/services/realdebrid-service.js');
+const { TorboxService } = await import('../dist/services/torbox-service.js');
 const { notifyLateResults } = await import('../dist/services/torrent-indexer-shared.js');
 
 const original = {
   fetchStreams: SourceService.fetchStreamsFromAllSources,
   fetchCached: RealDebridService.fetchCachedInfoHashes,
+  torboxCheck: TorboxService.checkCachedInfoHashes,
 };
 afterEach(() => {
   SourceService.fetchStreamsFromAllSources = original.fetchStreams;
   RealDebridService.fetchCachedInfoHashes = original.fetchCached;
+  TorboxService.checkCachedInfoHashes = original.torboxCheck;
 });
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const stream = (title, hash) => ({ title, infoHash: hash, magnet: `magnet:?xt=urn:btih:${hash}` });
 const rdArgs = (id) => ({ type: 'movie', id, extra: { debridProvider: 'realdebrid', realdebridToken: 'tok-cache-0123456789abcdef' } });
+const tbArgs = (id) => ({ type: 'movie', id, extra: { debridProvider: 'torbox', torboxToken: 'tok-cache-0123456789abcdef' } });
+const availability = (cached = [], unknown = []) => ({ cached: new Set(cached), unknown: new Set(unknown) });
 
 test('dentro do TTL a resposta sai do cache sem nova busca', async () => {
   let calls = 0;
@@ -118,4 +123,48 @@ test('multi atrasado com streams novos descarta a resposta guardada do título',
   assert.ok(again.streams[0].title.includes('r3'), again.streams[0].title);
   await controller.handleStreamRequest(rdArgs('tt1000010'));
   assert.equal(calls, 3, 'os outros títulos seguem no cache');
+});
+
+test('resposta sem a checagem do TorBox: o próximo pedido sai do cache na hora e a refaz em segundo plano', async () => {
+  const hash = 'b'.repeat(40);
+  let calls = 0;
+  SourceService.fetchStreamsFromAllSources = async () => {
+    calls++;
+    return [stream('tb', hash)];
+  };
+  let torboxUp = false;
+  TorboxService.checkCachedInfoHashes = async () => (torboxUp ? availability([hash]) : availability([], [hash]));
+  const controller = new StreamController();
+
+  const first = await controller.handleStreamRequest(tbArgs('tt1000011'));
+  assert.equal(first.streams[0].behaviorHints.cached, false);
+  assert.equal(StreamController.cacheControlFor(first), 'no-store');
+
+  torboxUp = true;
+  const second = await controller.handleStreamRequest(tbArgs('tt1000011'));
+  assert.equal(second.streams[0].behaviorHints.cached, false, 'sai a resposta guardada, sem esperar');
+  assert.equal(calls, 2, 'e a busca refaz em segundo plano');
+
+  await sleep(20);
+  const third = await controller.handleStreamRequest(tbArgs('tt1000011'));
+  assert.equal(third.streams[0].behaviorHints.cached, true);
+  assert.equal(calls, 2, 'a resposta completa fica no cache');
+});
+
+test('resposta sem a checagem do TorBox não substitui a completa ainda válida', async () => {
+  const hash = 'c'.repeat(40);
+  SourceService.fetchStreamsFromAllSources = async () => [stream('tb', hash)];
+  let torboxUp = true;
+  TorboxService.checkCachedInfoHashes = async () => (torboxUp ? availability([hash]) : availability([], [hash]));
+  const controller = new StreamController();
+
+  const first = await controller.handleStreamRequest(tbArgs('tt1000012'));
+  assert.equal(first.streams[0].behaviorHints.cached, true);
+
+  await sleep(80);
+  torboxUp = false;
+  await controller.handleStreamRequest(tbArgs('tt1000012'));
+  await sleep(20);
+  const after = await controller.handleStreamRequest(tbArgs('tt1000012'));
+  assert.equal(after.streams[0].behaviorHints.cached, true);
 });

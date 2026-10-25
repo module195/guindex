@@ -10,17 +10,13 @@ import { SourceService } from '../services/source-service.js';
 import { StreamService } from '../services/stream-service.js';
 import { ConfigService } from '../services/config-service.js';
 import { TorboxService } from '../services/torbox-service.js';
-import { onLateResults } from '../services/torrent-indexer-shared.js';
+import { DEBRID_MARGIN_MS, REQUEST_BUDGET_MS, onLateResults } from '../services/torrent-indexer-shared.js';
 
-const parsePositiveInt = (value: string | undefined, fallback: number): number => {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
-};
-
-// Mesmo orçamento da busca no torrent-indexer, contado desde a chegada do pedido.
-// A consulta de cache do debrid usa só o que sobrar dele: estourar o timeout do
-// addon no AIOStreams (10 s por padrão) descarta todos os streams do GuIndex.
-const REQUEST_BUDGET_MS = parsePositiveInt(process.env.TORRENT_INDEXER_REQUEST_BUDGET_MS, 8500);
+// O orçamento do pedido (REQUEST_BUDGET_MS) é o mesmo da busca no torrent-indexer,
+// contado desde a chegada do pedido; estourar o timeout do addon no AIOStreams
+// descarta todos os streams do GuIndex. Depois da busca, a consulta de cache do
+// debrid espera no máximo DEBRID_MARGIN_MS: com o TorBox lento, a resposta sai
+// sem o selo e a consulta termina em segundo plano para o próximo pedido.
 
 /** Resolve `true` se a promise terminar dentro de `ms`, `false` se o prazo vencer antes. */
 export async function finishesWithin(promise: Promise<unknown>, ms: number): Promise<boolean> {
@@ -53,6 +49,8 @@ interface StreamCacheEntry {
   response: StreamResponse;
   freshUntil: number;
   staleUntil: number;
+  /** Sem a checagem de cache do debrid: nasce velha, e o próximo pedido refaz em segundo plano */
+  partial: boolean;
 }
 
 export class StreamController {
@@ -70,7 +68,7 @@ export class StreamController {
   private static streamRefreshInFlight = new Map<string, Promise<StreamResponse>>();
   /** hash + contexto de cada stream entregue, para reaplicar o filtro de bloqueio do RD no cache */
   private static streamOrigins = new WeakMap<StremioStream, { hash: string; context?: StreamContext }>();
-  /** Respostas montadas sem a checagem de cache do debrid; não entram no cache */
+  /** Respostas montadas sem a checagem de cache do debrid completa */
   private static partialResponses = new WeakSet<StreamResponse>();
 
 
@@ -125,7 +123,12 @@ export class StreamController {
     return [type, id, extra?.debridProvider ?? '', token, extra?.requestBaseUrl ?? ''].join('|');
   }
 
-  /** Uma busca por chave; resultado não vazio entra no cache. */
+  /**
+   * Uma busca por chave; resultado não vazio entra no cache. Resposta sem a
+   * checagem do debrid entra já velha: o próximo pedido sai dela na hora, sem
+   * esperar outra busca, e a refaz em segundo plano com a disponibilidade pronta.
+   * Ela não substitui uma resposta completa ainda válida.
+   */
   private refreshStreams(key: string, args: StreamRequest): Promise<StreamResponse> {
     const inFlight = StreamController.streamRefreshInFlight.get(key);
     if (inFlight) {
@@ -133,22 +136,25 @@ export class StreamController {
     }
     const pending = this.computeStreams(args)
       .then((response) => {
-        // Resposta sem a checagem do debrid (orçamento estourado) não entra: o próximo
-        // pedido já encontra a disponibilidade pronta e deve refletir isso.
-        if (response.streams.length > 0 && !StreamController.partialResponses.has(response)) {
-          const cache = StreamController.streamCache;
-          cache.delete(key);
-          if (cache.size >= STREAM_CACHE_MAX_ENTRIES) {
-            const oldest = cache.keys().next().value;
-            if (oldest !== undefined) cache.delete(oldest);
-          }
-          const now = Date.now();
-          cache.set(key, {
-            response,
-            freshUntil: now + STREAM_CACHE_TTL_MS,
-            staleUntil: now + Math.max(STREAM_CACHE_TTL_MS, STREAM_CACHE_STALE_MS)
-          });
+        if (response.streams.length === 0) return response;
+        const cache = StreamController.streamCache;
+        const now = Date.now();
+        const partial = StreamController.partialResponses.has(response);
+        const existing = cache.get(key);
+        if (partial && existing && !existing.partial && now < existing.staleUntil) {
+          return response;
         }
+        cache.delete(key);
+        if (cache.size >= STREAM_CACHE_MAX_ENTRIES) {
+          const oldest = cache.keys().next().value;
+          if (oldest !== undefined) cache.delete(oldest);
+        }
+        cache.set(key, {
+          response,
+          freshUntil: partial ? now : now + STREAM_CACHE_TTL_MS,
+          staleUntil: now + Math.max(STREAM_CACHE_TTL_MS, STREAM_CACHE_STALE_MS),
+          partial
+        });
         return response;
       })
       .finally(() => StreamController.streamRefreshInFlight.delete(key));
@@ -183,7 +189,10 @@ export class StreamController {
       const origin = StreamController.streamOrigins.get(stream);
       return !origin || !RealDebridService.isBlocked(origin.hash, origin.context);
     });
-    return streams.length === response.streams.length ? response : { streams };
+    if (streams.length === response.streams.length) return response;
+    const filtered = { streams };
+    if (StreamController.partialResponses.has(response)) StreamController.partialResponses.add(filtered);
+    return filtered;
   }
 
   private async computeStreams(args: StreamRequest): Promise<StreamResponse> {
@@ -233,7 +242,10 @@ export class StreamController {
       console.info(`[GuIndex] 🔄 Preparando ${processableStreams.length} streams brutos para verificação Debrid`);
 
       const availabilityStart = Date.now();
-      const availabilityBudgetMs = requestStartedAt + REQUEST_BUDGET_MS - availabilityStart;
+      const availabilityBudgetMs = Math.min(
+        DEBRID_MARGIN_MS,
+        requestStartedAt + REQUEST_BUDGET_MS - availabilityStart
+      );
       // Sem resposta a tempo, os streams seguem como não cacheados; a consulta continua em
       // segundo plano e enche o cache de disponibilidade para o próximo pedido.
       const availabilityDone = await finishesWithin(
@@ -244,8 +256,16 @@ export class StreamController {
         console.info(`[GuIndex] ⏱️ Verificação de cache no Debrid levou ${Date.now() - availabilityStart}ms`);
       } else {
         console.info(
-          `[GuIndex] ⏰ Verificação de cache no Debrid passou do orçamento (${Math.max(0, availabilityBudgetMs)}ms); streams seguem como não cacheados`
+          `[GuIndex] ⏰ Verificação de cache no Debrid passou do prazo (${Math.max(0, availabilityBudgetMs)}ms); streams seguem como não cacheados`
         );
+      }
+      // Hash sem resposta do debrid (prazo vencido ou consulta com erro): a resposta
+      // não é a definitiva.
+      const unresolved = processableStreams.filter(
+        (stream) => stream.cached === undefined && this.getStreamInfoHash(stream)
+      ).length;
+      if (availabilityDone && unresolved > 0) {
+        console.info(`[GuIndex] ⚠️ Debrid não respondeu por ${unresolved} streams; seguem como não cacheados`);
       }
 
       if (!selectedToken) {
@@ -330,7 +350,7 @@ export class StreamController {
 
       console.info(`[GuIndex] 📤 Entrega final: ${streamMetadata.length} streams formatados enviados ao Stremio`);
       const response = { streams: streamMetadata };
-      if (selectedToken && !availabilityDone) {
+      if (selectedToken && unresolved > 0) {
         StreamController.partialResponses.add(response);
       }
       return response;
@@ -445,13 +465,19 @@ export class StreamController {
     }
 
     let cachedHashes = new Set<string>();
+    let unknownHashes = new Set<string>();
     if (provider === 'torbox') {
-      cachedHashes = await TorboxService.fetchCachedInfoHashes([...pendingHashes.keys()], token);
+      ({ cached: cachedHashes, unknown: unknownHashes } = await TorboxService.checkCachedInfoHashes(
+        [...pendingHashes.keys()],
+        token
+      ));
     } else {
       cachedHashes = await RealDebridService.fetchCachedInfoHashes([...pendingHashes.keys()], token);
     }
 
     for (const [hash, relatedStreams] of pendingHashes.entries()) {
+      // Consulta com erro: fica sem resposta (undefined), não como "não cacheado"
+      if (unknownHashes.has(hash)) continue;
       const isCached = cachedHashes.has(hash);
       for (const stream of relatedStreams) {
         stream.cached = isCached;

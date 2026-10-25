@@ -5,6 +5,7 @@
 import type { SourceStream } from '../models/source-model.js';
 import { SOURCES } from '../config/sources.js';
 import type { SourceFetchOptions } from './base-source-provider.js';
+import { REQUEST_BUDGET_MS } from './torrent-indexer-shared.js';
 
 // Timeout por provedor (ms). Padrão: o orçamento do pedido
 // (TORRENT_INDEXER_REQUEST_BUDGET_MS), para uma fonte lenta não segurar as
@@ -12,8 +13,7 @@ import type { SourceFetchOptions } from './base-source-provider.js';
 const SOURCE_TIMEOUT_MS = (() => {
   const parsed = Number.parseInt(process.env.SOURCE_TIMEOUT_MS ?? '', 10);
   if (Number.isFinite(parsed) && parsed >= 0) return parsed;
-  const budget = Number.parseInt(process.env.TORRENT_INDEXER_REQUEST_BUDGET_MS ?? '', 10);
-  return Number.isFinite(budget) && budget > 0 ? budget : 8500;
+  return REQUEST_BUDGET_MS;
 })();
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
