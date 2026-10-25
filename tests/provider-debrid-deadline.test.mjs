@@ -1,5 +1,5 @@
 // O provedor devolve os streams logo depois da busca, sem esperar a checagem de
-// cache no debrid: quem espera por ela (com prazo curto) é o StreamController.
+// cache no debrid: ele só a começa, e quem espera por ela é o StreamController.
 // Com o TorBox lento, esperar aqui fazia o provedor passar do timeout da
 // SourceService e a resposta inteira era descartada.
 // Roda contra o build: npm test
@@ -83,7 +83,7 @@ function newProvider(base) {
 
 const torbox = { debridProvider: 'torbox', torboxToken: 'tok-0123456789' };
 
-test('TorBox lento não atrasa o provedor: os streams saem sem consultar o debrid', async (t) => {
+test('TorBox lento não atrasa o provedor: a checagem começa e os streams saem sem esperar por ela', async (t) => {
   const srv = await startServer();
   t.after(srv.close);
   let lookups = 0;
@@ -99,7 +99,7 @@ test('TorBox lento não atrasa o provedor: os streams saem sem consultar o debri
   const elapsed = Date.now() - started;
 
   assert.ok(elapsed < 1000, `levou ${elapsed}ms`);
-  assert.equal(lookups, 0);
+  assert.equal(lookups, 1, 'a consulta já sai, enquanto as outras fontes respondem');
   assert.equal(streams.length, 1);
   assert.equal(streams[0].cached, undefined, 'a checagem fica com o StreamController');
 });

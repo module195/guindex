@@ -405,12 +405,27 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
       return [];
     }
 
-    // A checagem de cache no debrid fica com o StreamController, que espera por
-    // ela só uma fatia curta do orçamento. Esperar aqui também fazia o provedor
-    // passar do timeout da SourceService com o TorBox lento, e a resposta inteira
-    // era descartada.
     logReq(context, `✅ Retornando ${streams.length} streams para '${id}' em ${Date.now() - startedAt}ms`);
+    this.prefetchDebridAvailability(streams, options);
     return streams;
+  }
+
+  /**
+   * Começa a checagem de cache no debrid sem esperar por ela: a consulta corre
+   * enquanto a SourceService ainda espera as outras fontes, e o StreamController,
+   * que espera pela resposta e a aplica nos streams, aproveita a mesma consulta
+   * (o TorBox reaproveita a consulta em andamento de cada hash; o RD, a da lista
+   * da conta). Esperar aqui fazia o provedor passar do timeout da SourceService
+   * com o TorBox lento, e a resposta inteira era descartada.
+   */
+  private prefetchDebridAvailability(streams: SourceStream[], options?: SourceFetchOptions): void {
+    const hashes = new Set<string>();
+    for (const stream of streams) {
+      const hash = this.parser.getStreamInfoHash(stream)?.toLowerCase();
+      if (hash) hashes.add(hash);
+    }
+    if (hashes.size === 0) return;
+    void this.fetchDebridCachedHashes([...hashes], options).catch(() => undefined);
   }
 
   /**
