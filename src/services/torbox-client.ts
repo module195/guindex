@@ -159,6 +159,12 @@ export class TorboxClient {
     });
   }
 
+  /** Torrents da conta (sem id); o mylist sem id devolve uma lista. */
+  async listTorrents(limit = 1000): Promise<TorboxTorrent[]> {
+    const data = await this.get<TorboxTorrent[] | TorboxTorrent>('/v1/api/torrents/mylist', { limit });
+    return Array.isArray(data) ? data : [];
+  }
+
   async getTorrent(id: number): Promise<TorboxTorrent> {
     return this.get<TorboxTorrent>('/v1/api/torrents/mylist', { id, bypass_cache: true });
   }

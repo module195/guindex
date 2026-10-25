@@ -39,6 +39,13 @@ export class TorboxService {
   private static readonly INSTANT_AVAILABILITY_TTL_MS = 5 * 60 * 1000; // 5 min
   private static availabilityCache = new Map<string, AvailabilityCacheEntry>();
   private static readonly CHECK_CACHED_CHUNK = 90;
+  /**
+   * Torrents da conta por token (hash minúsculo → id). Reaproveitar o torrent
+   * evita um createtorrent a cada play.
+   */
+  private static readonly ACCOUNT_TORRENTS_TTL_MS = 2 * 60 * 1000;
+  private static accountTorrents = new Map<string, { torrents: Map<string, number>; expires: number }>();
+  private static accountTorrentsInFlight = new Map<string, Promise<Map<string, number>>>();
 
   private client: TorboxClient;
   private waitVideoUrl?: string;
@@ -112,7 +119,7 @@ export class TorboxService {
   // ---------- Magnet flow ----------
   async processMagnetToDirectUrl(magnet: string, context?: StreamContext): Promise<TorboxDirectResult> {
     try {
-      const { torrent_id } = await this.client.createTorrent(magnet);
+      const torrent_id = await this.findOrCreateTorrent(magnet);
 
       const attempt = async () => {
         const info = await this.client.getTorrent(torrent_id);
@@ -199,6 +206,58 @@ export class TorboxService {
       console.debug('[TorBox] error in processMagnetToDirectUrl', err);
       return this.placeholderResult();
     }
+  }
+
+  /** Usa o torrent que já está na conta com o mesmo hash; senão cria um novo. */
+  private async findOrCreateTorrent(magnet: string): Promise<number> {
+    const hash = magnet.match(/xt=urn:btih:([a-f0-9]{40})/i)?.[1]?.toLowerCase();
+    if (hash) {
+      const existing = await this.getAccountTorrents()
+        .then((torrents) => torrents.get(hash))
+        .catch((error) => {
+          console.warn('[TorBox] falha ao listar torrents da conta; criando o torrent:', error);
+          return undefined;
+        });
+      if (existing !== undefined) {
+        console.debug(`[TorBox] reusing torrent id=${existing} hash=${hash}`);
+        return existing;
+      }
+    }
+
+    const { torrent_id } = await this.client.createTorrent(magnet);
+    if (hash) {
+      TorboxService.accountTorrents.get(this.token)?.torrents.set(hash, torrent_id);
+    }
+    return torrent_id;
+  }
+
+  private async getAccountTorrents(): Promise<Map<string, number>> {
+    const cached = TorboxService.accountTorrents.get(this.token);
+    if (cached && cached.expires > Date.now()) {
+      return cached.torrents;
+    }
+    const inFlight = TorboxService.accountTorrentsInFlight.get(this.token);
+    if (inFlight) {
+      return inFlight;
+    }
+    const pending = this.client
+      .listTorrents()
+      .then((list) => {
+        const torrents = new Map<string, number>();
+        for (const torrent of list) {
+          if (torrent?.hash && typeof torrent.id === 'number') {
+            torrents.set(torrent.hash.toLowerCase(), torrent.id);
+          }
+        }
+        TorboxService.accountTorrents.set(this.token, {
+          torrents,
+          expires: Date.now() + TorboxService.ACCOUNT_TORRENTS_TTL_MS
+        });
+        return torrents;
+      })
+      .finally(() => TorboxService.accountTorrentsInFlight.delete(this.token));
+    TorboxService.accountTorrentsInFlight.set(this.token, pending);
+    return pending;
   }
 
   // ---------- WebDL flow ----------
