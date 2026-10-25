@@ -51,3 +51,13 @@ test('conta sem torrents (204) devolve vazio', async () => {
   const result = await RealDebridService.fetchCachedInfoHashes([HASH_DONE], 'token-c');
   assert.equal(result.size, 0);
 });
+
+test('lista da conta com erro fica sem resposta (não "nada baixado") e não entra no cache', async () => {
+  rd.intercept({ path: (p) => p.startsWith('/rest/1.0/torrents?'), method: 'GET' }).reply(503, 'fora do ar');
+  assert.equal(await RealDebridService.checkCachedInfoHashes([HASH_DONE], 'token-d'), undefined);
+
+  rd.intercept({ path: (p) => p.startsWith('/rest/1.0/torrents?'), method: 'GET' })
+    .reply(200, [{ hash: HASH_DONE, status: 'downloaded' }]);
+  const retried = await RealDebridService.checkCachedInfoHashes([HASH_DONE], 'token-d');
+  assert.deepEqual([...retried], [HASH_DONE], 'a próxima consulta vai ao RD de novo');
+});

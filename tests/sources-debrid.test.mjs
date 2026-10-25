@@ -16,6 +16,7 @@ const { SourceService } = await import('../dist/services/source-service.js');
 const { SOURCES } = await import('../dist/config/sources.js');
 const { RealDebridService } = await import('../dist/services/realdebrid-service.js');
 const { TorrentIndexerProvider } = await import('../dist/services/torrent-indexer-provider.js');
+const { TorboxService } = await import('../dist/services/torbox-service.js');
 
 test('addon externo que não responde é cortado no prazo e os streams do GuIndex saem', async () => {
   mockAgent
@@ -31,6 +32,48 @@ test('addon externo que não responde é cortado no prazo e os streams do GuInde
   const streams = await SourceService.fetchStreamsFromAllSources('movie', 'tt15398776');
   assert.ok(Date.now() - started < 2000, `demorou ${Date.now() - started}ms`);
   assert.deepEqual(streams.map((s) => s.title), ['rápido']);
+});
+
+test('a checagem de cache do debrid começa quando cada fonte responde, sem esperar a mais lenta', async () => {
+  const fast = { name: 'Rápida', getStreams: async () => [{ title: 'rápido', infoHash: 'c'.repeat(40) }] };
+  const slow = {
+    name: 'Lenta',
+    getStreams: () => new Promise((r) => setTimeout(() => r([{ title: 'lento', magnet: `magnet:?xt=urn:btih:${'D'.repeat(40)}` }]), 300)),
+  };
+  SOURCES.splice(0, SOURCES.length, fast, slow);
+  const original = TorboxService.checkCachedInfoHashes;
+  const lookups = [];
+  const started = Date.now();
+  TorboxService.checkCachedInfoHashes = async (hashes, token) => {
+    lookups.push({ at: Date.now() - started, hashes, token });
+    return { cached: new Set(), unknown: new Set() };
+  };
+  try {
+    await SourceService.fetchStreamsFromAllSources('movie', 'tt15398777', { debridProvider: 'torbox', torboxToken: 'tok-pre' });
+  } finally {
+    TorboxService.checkCachedInfoHashes = original;
+  }
+  assert.equal(lookups.length, 2);
+  assert.deepEqual(lookups[0].hashes, ['c'.repeat(40)]);
+  assert.ok(lookups[0].at < 150, `a rápida foi consultada em ${lookups[0].at}ms`);
+  assert.deepEqual(lookups[1].hashes, ['d'.repeat(40)]);
+  assert.equal(lookups[1].token, 'tok-pre');
+});
+
+test('sem token, nenhuma checagem antecipada', async () => {
+  SOURCES.splice(0, SOURCES.length, { name: 'X', getStreams: async () => [{ title: 'x', infoHash: 'c'.repeat(40) }] });
+  const original = TorboxService.checkCachedInfoHashes;
+  let calls = 0;
+  TorboxService.checkCachedInfoHashes = async () => {
+    calls++;
+    return { cached: new Set(), unknown: new Set() };
+  };
+  try {
+    await SourceService.fetchStreamsFromAllSources('movie', 'tt15398778');
+  } finally {
+    TorboxService.checkCachedInfoHashes = original;
+  }
+  assert.equal(calls, 0);
 });
 
 const rd = mockAgent.get('https://api.real-debrid.com');

@@ -6,6 +6,7 @@ import { request } from 'undici';
 import { BaseSourceProvider, type SourceFetchOptions } from './base-source-provider.js';
 import { RealDebridService } from './realdebrid-service.js';
 import { TorboxService } from './torbox-service.js';
+import { prefetchDebridAvailability } from './debrid-prefetch.js';
 import type { SourceStream, StreamContext } from '../models/source-model.js';
 import { TorrentParser } from './torrent-parser.js';
 import { filenameLanguageTag } from './audio-language.js';
@@ -336,6 +337,8 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     const cacheSufficient = this.hasSufficientResults(cacheTorrents, fallbackTitle, context);
     const streams = this.collectStreamsFromTorrents(cacheTorrents, fallbackTitle, context, seen, sourceCounts, 150);
     const cacheHas4K = streams.some((stream) => stream.quality === '4K');
+    // O que o cache já trouxe vai para a checagem do debrid enquanto o multi roda
+    prefetchDebridAvailability(streams, options);
 
     // ═══════════════════════════════════════════════════════
     // FASE 2 — Multi
@@ -405,10 +408,9 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
       return [];
     }
 
-    // A checagem de cache no debrid fica com o StreamController, que espera por
-    // ela só uma fatia curta do orçamento. Esperar aqui também fazia o provedor
-    // passar do timeout da SourceService com o TorBox lento, e a resposta inteira
-    // era descartada.
+    // A checagem de cache no debrid fica com o StreamController; a SourceService
+    // a começa assim que esta fonte responde. Esperar por ela aqui fazia o
+    // provedor passar do timeout da SourceService com o TorBox lento.
     logReq(context, `✅ Retornando ${streams.length} streams para '${id}' em ${Date.now() - startedAt}ms`);
     return streams;
   }

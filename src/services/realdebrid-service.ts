@@ -87,7 +87,7 @@ export class RealDebridService {
   private static readonly ACCOUNT_TORRENTS_LIMIT = 2500;
   /** Chave = token, para a lista de um usuário nunca vazar para outro */
   private static accountHashesCache = new Map<string, AccountHashesCacheEntry>();
-  private static accountHashesInFlight = new Map<string, Promise<Map<string, string>>>();
+  private static accountHashesInFlight = new Map<string, Promise<Map<string, string> | undefined>>();
   /** Após 401/403 em /torrents, pausa novas chamadas por este período */
   private static readonly ACCOUNT_TORRENTS_DISABLE_MS = (() => {
     const parsed = Number.parseInt(process.env.RD_ACCOUNT_TORRENTS_DISABLE_MS ?? '', 10);
@@ -227,12 +227,21 @@ export class RealDebridService {
     hashes: string[],
     token?: string
   ): Promise<Set<string>> {
+    return (await this.checkCachedInfoHashes(hashes, token)) ?? new Set<string>();
+  }
+
+  /**
+   * Como `fetchCachedInfoHashes`, mas `undefined` quando a lista da conta não
+   * veio (erro de rede, timeout, 5xx): sem resposta, não "nada baixado".
+   */
+  static async checkCachedInfoHashes(hashes: string[], token?: string): Promise<Set<string> | undefined> {
     const result = new Set<string>();
     if (!token || !hashes || hashes.length === 0) {
       return result;
     }
 
     const accountTorrents = await this.getAccountDownloadedTorrents(token);
+    if (!accountTorrents) return undefined;
     for (const hash of hashes) {
       const normalized = hash?.toLowerCase();
       if (normalized && accountTorrents.has(normalized)) {
@@ -242,7 +251,7 @@ export class RealDebridService {
     return result;
   }
 
-  private static async getAccountDownloadedTorrents(token: string): Promise<Map<string, string>> {
+  private static async getAccountDownloadedTorrents(token: string): Promise<Map<string, string> | undefined> {
     const now = Date.now();
     const cached = this.accountHashesCache.get(token);
     if (cached && cached.expires > now) {
@@ -266,7 +275,8 @@ export class RealDebridService {
     return promise;
   }
 
-  private static async fetchAccountDownloadedTorrents(token: string): Promise<Map<string, string>> {
+  /** Lista da conta; `undefined` quando ela não veio (o 401/403 conta como conta vazia). */
+  private static async fetchAccountDownloadedTorrents(token: string): Promise<Map<string, string> | undefined> {
     const torrents = new Map<string, string>();
     try {
       const response = await request(
@@ -286,8 +296,9 @@ export class RealDebridService {
         if (response.statusCode === 401 || response.statusCode === 403) {
           this.accountTorrentsDisabledUntil.set(token, Date.now() + this.ACCOUNT_TORRENTS_DISABLE_MS);
           console.warn(`[RealDebrid] /torrents retornou ${response.statusCode}; pausando verificações por ${this.ACCOUNT_TORRENTS_DISABLE_MS}ms`);
+          return torrents;
         }
-        return torrents;
+        return undefined;
       } else {
         const payload = (await response.body.json()) as unknown;
         for (const entry of Array.isArray(payload) ? (payload as AccountTorrent[]) : []) {
@@ -297,7 +308,7 @@ export class RealDebridService {
         }
       }
     } catch {
-      return torrents;
+      return undefined;
     }
 
     this.accountHashesCache.set(token, {
@@ -384,7 +395,7 @@ export class RealDebridService {
     if (!hash) {
       return undefined;
     }
-    const torrentId = (await RealDebridService.getAccountDownloadedTorrents(this.token)).get(hash);
+    const torrentId = (await RealDebridService.getAccountDownloadedTorrents(this.token))?.get(hash);
     if (!torrentId) {
       return undefined;
     }

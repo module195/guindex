@@ -153,6 +153,127 @@ test('TorBox: consulta com erro volta como desconhecida e não fica no cache de 
   assert.equal(retried.cached.size, 0);
 });
 
+const checkcached = { path: (p) => p.startsWith('/v1/api/torrents/checkcached'), method: 'GET' };
+const askedHashes = (opts) => new URL(opts.path, 'https://api.torbox.app').searchParams.getAll('hash');
+const authOf = (opts) => {
+  const headers = opts.headers ?? {};
+  if (Array.isArray(headers)) {
+    const i = headers.findIndex((h) => String(h).toLowerCase() === 'authorization');
+    return i >= 0 ? String(headers[i + 1]) : '';
+  }
+  return String(headers.authorization ?? headers.Authorization ?? '');
+};
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+test('TorBox: cada resposta chega assim que sai, e a do cache de disponibilidade na hora', async () => {
+  const known = '1a'.repeat(20);
+  const fresh = '1b'.repeat(20);
+  torbox.intercept(checkcached).reply(200, { success: true, data: [{ hash: known }] });
+  await TorboxService.checkCachedInfoHashes([known], 'token-respostas');
+
+  torbox.intercept(checkcached).reply(200, { success: true, data: [] }).delay(50);
+  const answers = [];
+  const pending = TorboxService.checkCachedInfoHashes([known, fresh], 'token-respostas', (hash, isCached) =>
+    answers.push([hash, isCached])
+  );
+  assert.deepEqual(answers, [[known, true]], 'o hash já conhecido sai antes da consulta nova');
+  const result = await pending;
+  assert.deepEqual(answers, [[known, true], [fresh, false]]);
+  assert.deepEqual([...result.cached], [known]);
+  assert.equal(result.unknown.size, 0);
+});
+
+test('TorBox: a chave com erro de um usuário não deixa o mesmo hash sem resposta para outro', async () => {
+  const hash = '2a'.repeat(20);
+  const tokens = [];
+  torbox
+    .intercept(checkcached)
+    .reply((opts) => {
+      const auth = authOf(opts);
+      tokens.push(auth);
+      if (auth.includes('token-invalido')) return { statusCode: 401, data: { success: false, error: 'AUTH_ERROR' } };
+      return { statusCode: 200, data: { success: true, data: askedHashes(opts).map((h) => ({ hash: h })) } };
+    })
+    .times(2);
+
+  const [bad, good] = await Promise.all([
+    TorboxService.checkCachedInfoHashes([hash], 'token-invalido'),
+    TorboxService.checkCachedInfoHashes([hash], 'token-valido'),
+  ]);
+  assert.equal(tokens.length, 2, 'cada chave faz a sua consulta');
+  assert.deepEqual([...bad.unknown], [hash]);
+  assert.deepEqual([...good.cached], [hash]);
+  assert.equal(good.unknown.size, 0);
+});
+
+test('TorBox: consulta presa não segura quem chega depois; vale a primeira resposta', async () => {
+  const hash = '3a'.repeat(20);
+  const shareMs = TorboxService.IN_FLIGHT_SHARE_MS;
+  TorboxService.IN_FLIGHT_SHARE_MS = 30;
+  try {
+    let calls = 0;
+    torbox
+      .intercept(checkcached)
+      .reply(() => {
+        calls++;
+        return { statusCode: 200, data: { success: true, data: [{ hash }] } };
+      })
+      .delay(800);
+    torbox
+      .intercept(checkcached)
+      .reply(() => {
+        calls++;
+        return { statusCode: 200, data: { success: true, data: [{ hash }] } };
+      });
+
+    const first = TorboxService.checkCachedInfoHashes([hash], 'token-presa');
+    await sleep(60);
+    const started = Date.now();
+    const second = await TorboxService.checkCachedInfoHashes([hash], 'token-presa');
+    assert.ok(Date.now() - started < 400, `levou ${Date.now() - started}ms`);
+    assert.equal(calls, 2, 'a consulta antiga continua; a nova sai ao lado dela');
+    assert.deepEqual([...second.cached], [hash]);
+    assert.deepEqual([...(await first).cached], [hash]);
+  } finally {
+    TorboxService.IN_FLIGHT_SHARE_MS = shareMs;
+  }
+});
+
+test('TorBox: consulta que trava depois que outro pedido entrou nela abre outra sozinha', async () => {
+  const hash = '5a'.repeat(20);
+  const shareMs = TorboxService.IN_FLIGHT_SHARE_MS;
+  TorboxService.IN_FLIGHT_SHARE_MS = 60;
+  try {
+    let calls = 0;
+    const reply = () => {
+      calls++;
+      return { statusCode: 200, data: { success: true, data: [{ hash }] } };
+    };
+    torbox.intercept(checkcached).reply(reply).delay(1500);
+    torbox.intercept(checkcached).reply(reply);
+
+    const first = TorboxService.checkCachedInfoHashes([hash], 'token-trava');
+    await sleep(10);
+    const started = Date.now();
+    const joined = await TorboxService.checkCachedInfoHashes([hash], 'token-trava');
+    assert.ok(Date.now() - started < 500, `quem entrou na consulta presa esperou ${Date.now() - started}ms`);
+    assert.equal(calls, 2);
+    assert.deepEqual([...joined.cached], [hash]);
+    assert.deepEqual([...(await first).cached], [hash]);
+    assert.equal(TorboxService.knownAvailability(hash), true, 'e a resposta fica no cache de disponibilidade');
+  } finally {
+    TorboxService.IN_FLIGHT_SHARE_MS = shareMs;
+  }
+});
+
+test('TorBox: item malformado no checkcached não derruba a consulta', async () => {
+  const hash = '4a'.repeat(20);
+  torbox.intercept(checkcached).reply(200, { success: true, data: [null, { hash: 123 }, 'x', { hash }] });
+  const result = await TorboxService.checkCachedInfoHashes([hash, '4b'.repeat(20)], 'token-malformado');
+  assert.deepEqual([...result.cached], [hash]);
+  assert.equal(result.unknown.size, 0);
+});
+
 test('TorBox: arquivo de id 0 é pedido com file_id=0, sem trocar de episódio', async () => {
   const requested = [];
   torbox

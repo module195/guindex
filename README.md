@@ -81,10 +81,12 @@ Stremio/AIOStreams
        │         ├── Year validation (filmes)
        │         └── Deduplicacao por info_hash
        │
-       ├──── Debrid cache check (no /stream, no maximo TORRENT_INDEXER_DEBRID_MARGIN_MS)
+       ├──── Debrid cache check (comeca com o cache da Fase 1 e quando cada fonte responde;
+       │         o /stream espera ate o fim do orcamento)
        │         ├── TorBox: /api/torrents/checkcached (sem lista de arquivos; um hash
-       │         │     ja em consulta reaproveita a mesma; sem resposta a tempo, segue
-       │         │     em segundo plano e o stream sai como ⏳)
+       │         │     ja em consulta pelo mesmo token reaproveita a mesma; cada resposta
+       │         │     vale assim que chega; sem resposta a tempo, segue em segundo
+       │         │     plano e o stream sai como ⏳)
        │         └── Real-Debrid: torrents já baixados na conta (/torrents)
        │
        └──── Retorna streams formatados para Stremio
@@ -106,7 +108,7 @@ Stremio/AIOStreams
    - **Fase 3 (indexers mais rapidos)**: se nada veio, `/indexers/{nome}` nos indexers mais rapidos pelo historico, com as queries de texto que o multi nao cobriu (ou tambem as do multi, se ele nao respondeu)
 5. **Filtro de relevancia** — `isRelevantTorrent()` descarta resultados com titulo errado, temporada/episodio divergente, ou ano incompativel
 6. **Ranking** — Ordena por qualidade (1080p > 720p), idioma (Dual > PT > EN), e seeds
-7. **Debrid check** — Feito no `/stream`, depois da busca: verifica cache no TorBox/RD para indicar ⚡ ou ⏳, esperando no maximo `TORRENT_INDEXER_DEBRID_MARGIN_MS` (1,5 s) e sem passar do orcamento. Se o debrid nao responder a tempo, os streams saem como nao cacheados; a consulta termina em segundo plano (`TORBOX_CHECKCACHED_TIMEOUT_MS`) e fica no cache de disponibilidade. Essa resposta nao fica guardada como definitiva: o proximo pedido sai dela na hora e refaz a busca em segundo plano, ja com o selo
+7. **Debrid check** — Verifica cache no TorBox/RD para indicar ⚡ ou ⏳. A consulta comeca com o que o cache (Fase 1) ja trouxe, enquanto o multi roda, e com os streams de cada fonte assim que ela responde; o `/stream` espera por ela ate o fim do orcamento (menos 0,2 s para montar a resposta; `TORRENT_INDEXER_DEBRID_MAX_WAIT_MS` limita essa espera). Cada hash vale assim que o TorBox responde: um hash lento nao tira o selo dos outros. Os que nao responderem a tempo (ou cuja consulta falhou) saem como nao cacheados; a consulta termina em segundo plano (`TORBOX_CHECKCACHED_TIMEOUT_MS`) e fica no cache de disponibilidade. Essa resposta nao fica guardada como definitiva: quando a consulta termina, a resposta guardada e remontada com as respostas, e um pedido antes disso a recebe remontada com o que ja chegou
 8. **Resposta** — Retorna `SourceStream[]` formatados com titulo, qualidade, idioma e badges
 
 ### Mapa de indexers
@@ -361,6 +363,7 @@ npm start
 | `STREMIO_ADDON_SOURCES` | `[]` | Lista JSON de addons extras no formato `[{"name":"Name","url":"https://example.com/manifest.json"}]` (opcional) |
 | `STREMIO_ADDON_TIMEOUT_MS` | orçamento − margem do debrid (6500) | Prazo do pedido a cada addon externo; passou disso, o addon é cortado e os outros streams seguem |
 | `SOURCE_TIMEOUT_MS` | `TORRENT_INDEXER_REQUEST_BUDGET_MS` (8000) | Prazo de cada fonte no agregador; `0` desliga |
+| `TORRENT_INDEXER_DEBRID_MAX_WAIT_MS` | — (até o fim do orçamento) | Teto da espera do `/stream` pela consulta de cache do debrid; com o debrid lento, responde mais cedo, sem o selo. `0` não espera (usa só o que o cache de disponibilidade já sabe) |
 | `RD_BLOCKED_TTL_MS` | `86400000` (24 h) | Por quanto tempo um arquivo recusado pelo Real-Debrid (infringing_file) fica escondido; `0` desliga |
 | `STREAM_CACHE_TTL_MS` | `120000` (2 min) | Por quanto tempo a resposta do `/stream` sai do cache sem nova busca; `0` desliga o cache |
 | `STREAM_CACHE_STALE_MS` | `1800000` (30 min) | Até quando a resposta antiga ainda é entregue na hora enquanto uma busca nova roda em segundo plano |
@@ -424,7 +427,7 @@ npm start
 |----------|--------|-----------|
 | `TORBOX_WAIT_VIDEO_URL` | — | Video de espera enquanto TorBox processa |
 | `TORBOX_STREAM_LIMIT` | `15` | Limite de streams TorBox (o melhor de cada qualidade sempre entra) |
-| `TORBOX_CHECKCACHED_TIMEOUT_MS` | `15000` | Timeout da consulta de cache no TorBox. O `/stream` espera por ela so `TORRENT_INDEXER_DEBRID_MARGIN_MS`; o resto roda em segundo plano e enche o cache de disponibilidade |
+| `TORBOX_CHECKCACHED_TIMEOUT_MS` | `15000` | Timeout da consulta de cache no TorBox. O `/stream` espera por ela so ate o fim do orcamento; o resto roda em segundo plano e enche o cache de disponibilidade. Consulta sem resposta em 3 s abre outra ao lado e vale a primeira resposta, para todos que esperam por ela |
 
 ### Perfil recomendado para VPS
 
