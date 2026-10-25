@@ -48,10 +48,6 @@ import {
 } from './torrent-indexer-shared.js';
 
 export { logReq } from './torrent-indexer-shared.js';
-// Folga entre o fim da checagem de cache no debrid e o timeout do provedor
-// (TORRENT_INDEXER_REQUEST_BUDGET_MS), para a resposta sair antes dele.
-const DEBRID_DEADLINE_SAFETY_MS = 400;
-
 const BACKGROUND_WARM_DELAY_MS = 2000;
 
 class GlobalIndexerQueue {
@@ -404,17 +400,10 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
       return [];
     }
 
-    // A consulta ao debrid usa só o que sobrou do orçamento: se o TorBox/RD
-    // demorar, os streams saem sem o selo de cache em vez de a resposta inteira
-    // estourar o timeout do provedor e ser descartada.
-    const debridDone = await this.decorateWithDebrid(
-      streams,
-      options,
-      searchDeadlineAt + DEBRID_MARGIN_MS - DEBRID_DEADLINE_SAFETY_MS,
-    );
-    if (!debridDone) {
-      logReq(context, `⏰ Checagem de cache no debrid passou do prazo; streams seguem como não cacheados`);
-    }
+    // A checagem de cache no debrid fica com o StreamController, que espera por
+    // ela só uma fatia curta do orçamento. Esperar aqui também fazia o provedor
+    // passar do timeout da SourceService com o TorBox lento, e a resposta inteira
+    // era descartada.
     logReq(context, `✅ Retornando ${streams.length} streams para '${id}' em ${Date.now() - startedAt}ms`);
     return streams;
   }
@@ -608,16 +597,10 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     return streams;
   }
 
-  /**
-   * Marca os streams cacheados no debrid. Com `deadlineAt`, desiste no prazo
-   * (resolve false) e deixa todos como não cacheados; a consulta segue em
-   * segundo plano e enche o cache de disponibilidade para o próximo pedido.
-   */
   private async decorateWithDebrid(
     streams: SourceStream[],
-    options?: SourceFetchOptions,
-    deadlineAt?: number
-  ): Promise<boolean> {
+    options?: SourceFetchOptions
+  ): Promise<void> {
     const hashToStreams = new Map<string, SourceStream[]>();
 
     for (const stream of streams) {
@@ -635,27 +618,14 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     }
 
     if (hashToStreams.size === 0) {
-      return true;
+      return;
     }
 
     let cachedHashes = new Set<string>();
-    const lookup = this.fetchDebridCachedHashes([...hashToStreams.keys()], options).catch(() => new Set<string>());
-    if (deadlineAt === undefined) {
-      cachedHashes = await lookup;
-    } else {
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      const expired = new Promise<undefined>((resolve) => {
-        timer = setTimeout(() => resolve(undefined), Math.max(0, deadlineAt - Date.now()));
-      });
-      const result = await Promise.race([lookup, expired]);
-      if (timer) clearTimeout(timer);
-      if (!result) {
-        for (const relatedStreams of hashToStreams.values()) {
-          for (const s of relatedStreams) s.cached = false;
-        }
-        return false;
-      }
-      cachedHashes = result;
+    try {
+      cachedHashes = await this.fetchDebridCachedHashes([...hashToStreams.keys()], options);
+    } catch {
+      cachedHashes = new Set<string>();
     }
 
     const badgeProvider =
@@ -670,7 +640,6 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
         }
       }
     }
-    return true;
   }
 
   private async fetchDebridCachedHashes(
@@ -1667,8 +1636,8 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     source: sourceLabel,
     indexer: indexerSlug,
     indexerLabel,
-    magnet,
-    cached: false
+    magnet
+    // `cached` fica indefinido até a checagem do debrid (no StreamController)
   };
 
   if (detailUrl) {

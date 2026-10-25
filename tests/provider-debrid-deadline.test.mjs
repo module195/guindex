@@ -1,6 +1,7 @@
-// A checagem de cache no debrid dentro do provedor respeita o orçamento do
-// pedido: com o TorBox lento, os streams saem sem selo em vez de o provedor
-// estourar o timeout e a resposta inteira ser descartada.
+// O provedor devolve os streams logo depois da busca, sem esperar a checagem de
+// cache no debrid: quem espera por ela (com prazo curto) é o StreamController.
+// Com o TorBox lento, esperar aqui fazia o provedor passar do timeout da
+// SourceService e a resposta inteira era descartada.
 // Roda contra o build: npm test
 import { test, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
@@ -15,10 +16,14 @@ const { TorboxService } = await import('../dist/services/torbox-service.js');
 
 const IMDB = 'tt0133093';
 const HASH = 'a'.repeat(40);
-const originalFetchCached = TorboxService.fetchCachedInfoHashes;
+const originals = {
+  fetchCached: TorboxService.fetchCachedInfoHashes,
+  checkCached: TorboxService.checkCachedInfoHashes,
+};
 
 afterEach(() => {
-  TorboxService.fetchCachedInfoHashes = originalFetchCached;
+  TorboxService.fetchCachedInfoHashes = originals.fetchCached;
+  TorboxService.checkCachedInfoHashes = originals.checkCached;
 });
 
 function startServer() {
@@ -78,26 +83,23 @@ function newProvider(base) {
 
 const torbox = { debridProvider: 'torbox', torboxToken: 'tok-0123456789' };
 
-test('TorBox lento: o provedor responde dentro do orçamento, sem selo de cache', async (t) => {
+test('TorBox lento não atrasa o provedor: os streams saem sem consultar o debrid', async (t) => {
   const srv = await startServer();
   t.after(srv.close);
-  TorboxService.fetchCachedInfoHashes = () => new Promise((r) => setTimeout(() => r(new Set([HASH])), 5000).unref());
+  let lookups = 0;
+  const slow = () => {
+    lookups++;
+    return new Promise((r) => setTimeout(() => r(new Set([HASH])), 5000).unref());
+  };
+  TorboxService.fetchCachedInfoHashes = slow;
+  TorboxService.checkCachedInfoHashes = slow;
 
   const started = Date.now();
   const streams = await newProvider(srv.base).getStreams('movie', IMDB, torbox);
   const elapsed = Date.now() - started;
 
-  assert.ok(elapsed < 1500, `levou ${elapsed}ms, o orçamento é 1500ms`);
+  assert.ok(elapsed < 1000, `levou ${elapsed}ms`);
+  assert.equal(lookups, 0);
   assert.equal(streams.length, 1);
-  assert.equal(streams[0].cached, false);
-});
-
-test('TorBox rápido: mantém o selo de cache', async (t) => {
-  const srv = await startServer();
-  t.after(srv.close);
-  TorboxService.fetchCachedInfoHashes = async () => new Set([HASH]);
-
-  const streams = await newProvider(srv.base).getStreams('movie', IMDB, torbox);
-  assert.equal(streams.length, 1);
-  assert.equal(streams[0].cached, true);
+  assert.equal(streams[0].cached, undefined, 'a checagem fica com o StreamController');
 });

@@ -114,6 +114,45 @@ test('TorBox: checkcached vai em lotes e um lote com erro não derruba os outros
   assert.equal(result.size, 110);
 });
 
+test('TorBox: checkcached sem lista de arquivos, e pedidos simultâneos do mesmo hash viram uma consulta', async () => {
+  const hash = 'd'.repeat(40);
+  const asked = [];
+  torbox
+    .intercept({ path: (p) => p.startsWith('/v1/api/torrents/checkcached'), method: 'GET' })
+    .reply((opts) => {
+      asked.push(new URL(opts.path, 'https://api.torbox.app').searchParams);
+      return { statusCode: 200, data: { success: true, data: [{ hash, name: 'x', size: 1 }] } };
+    })
+    .delay(50);
+
+  const [a, b] = await Promise.all([
+    TorboxService.checkCachedInfoHashes([hash], 'token-dedupe'),
+    TorboxService.checkCachedInfoHashes([hash.toUpperCase()], 'token-dedupe'),
+  ]);
+  assert.equal(asked.length, 1);
+  assert.equal(asked[0].get('list_files'), 'false');
+  assert.deepEqual([...a.cached], [hash]);
+  assert.deepEqual([...b.cached], [hash]);
+  assert.equal(a.unknown.size + b.unknown.size, 0);
+});
+
+test('TorBox: consulta com erro volta como desconhecida e não fica no cache de disponibilidade', async () => {
+  const hash = 'e'.repeat(40);
+  torbox
+    .intercept({ path: (p) => p.startsWith('/v1/api/torrents/checkcached'), method: 'GET' })
+    .reply(503, 'fora do ar');
+  const failed = await TorboxService.checkCachedInfoHashes([hash], 'token-erro');
+  assert.deepEqual([...failed.unknown], [hash]);
+  assert.equal(failed.cached.size, 0);
+
+  torbox
+    .intercept({ path: (p) => p.startsWith('/v1/api/torrents/checkcached'), method: 'GET' })
+    .reply(200, { success: true, data: [] });
+  const retried = await TorboxService.checkCachedInfoHashes([hash], 'token-erro');
+  assert.equal(retried.unknown.size, 0, 'a segunda consulta vai ao TorBox de novo');
+  assert.equal(retried.cached.size, 0);
+});
+
 test('TorBox: arquivo de id 0 é pedido com file_id=0, sem trocar de episódio', async () => {
   const requested = [];
   torbox
