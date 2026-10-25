@@ -236,6 +236,9 @@ export const MAX_CACHE_QUERIES = parsePositiveInt(process.env.TORRENT_INDEXER_CA
 export const CACHE_TIMEOUT_MS = parsePositiveInt(process.env.TORRENT_INDEXER_CACHE_TIMEOUT_MS, 3000);
 // Fase 2: com cache suficiente, quanto ainda esperar pelo multi antes de responder.
 export const MULTI_GRACE_MS = parseNonNegativeInt(process.env.TORRENT_INDEXER_MULTI_GRACE_MS, 1500);
+// Fase 2: cache suficiente mas sem nenhum 4K. O dump do betor traz muito 1080p e o
+// 4K costuma vir só do multi, que raspa em tempo real; vale esperar mais por ele.
+export const MULTI_GRACE_NO_4K_MS = parseNonNegativeInt(process.env.TORRENT_INDEXER_MULTI_GRACE_NO_4K_MS, 4000);
 // Fase 3: tempo mínimo restante para valer a pena e máximo de queries.
 export const PHASE3_MIN_MS = parsePositiveInt(process.env.TORRENT_INDEXER_PHASE3_MIN_MS, 1500);
 export const PHASE3_MAX_QUERIES = parsePositiveInt(process.env.TORRENT_INDEXER_PHASE3_MAX_QUERIES, 3);
@@ -335,4 +338,24 @@ export function logReq(context: MatchContext | undefined, message: string) {
   const req = context?.reqId ? `[Req: ${context.reqId}]` : '';
   const name = context?.logName ? `[${context.logName}]` : '';
   console.info(`[${ts}] [GuIndex] ${req} ${name} ${message}`.replace(/\s+/g, ' '));
+}
+
+// Aviso de que o multi terminou depois da resposta e trouxe streams que ela não
+// tinha. Quem guarda a resposta (o cache do /stream) descarta a versão antiga.
+type LateResultsListener = (type: string, id: string) => void;
+const lateResultsListeners = new Set<LateResultsListener>();
+
+export function onLateResults(listener: LateResultsListener): () => void {
+  lateResultsListeners.add(listener);
+  return () => lateResultsListeners.delete(listener);
+}
+
+export function notifyLateResults(type: string, id: string): void {
+  for (const listener of lateResultsListeners) {
+    try {
+      listener(type, id);
+    } catch {
+      // um ouvinte com erro não impede os outros
+    }
+  }
 }

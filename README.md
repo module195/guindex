@@ -59,8 +59,12 @@ Stremio/AIOStreams
        ├──── Fase 2: /indexers/multi (scraping live, IMDb + titulo PT + original)
        │         │
        │         ├── cache suficiente (≥2 resultados de ≥2 indexers)?
-       │         │     SIM → espera o multi so por TORRENT_INDEXER_MULTI_GRACE_MS e junta
+       │         │     SIM, com 4K → espera o multi so por TORRENT_INDEXER_MULTI_GRACE_MS
+       │         │     SIM, sem 4K → espera ate TORRENT_INDEXER_MULTI_GRACE_NO_4K_MS (o dump
+       │         │                   do betor traz muito 1080p; o 4K costuma vir do multi)
        │         │     NAO → espera o multi ate o prazo do pedido e junta
+       │         ├── multi que chega depois da resposta com streams novos descarta a
+       │         │     resposta guardada no cache do /stream; o proximo pedido busca de novo
        │         ├── indexers e capacidades vem de /sources?v=2
        │         │     (IMDb so para supports_imdb, texto so para supports_text,
        │         │      healthy:false fica de fora)
@@ -417,7 +421,7 @@ npm start
 | Variavel | Padrao | Descricao |
 |----------|--------|-----------|
 | `TORBOX_WAIT_VIDEO_URL` | — | Video de espera enquanto TorBox processa |
-| `TORBOX_STREAM_LIMIT` | `15` | Limite de streams TorBox |
+| `TORBOX_STREAM_LIMIT` | `15` | Limite de streams TorBox (o melhor de cada qualidade sempre entra) |
 
 ### Perfil recomendado para VPS
 

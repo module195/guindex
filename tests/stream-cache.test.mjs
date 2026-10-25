@@ -10,6 +10,7 @@ process.env.STREAM_CACHE_STALE_MS = '10000';
 const { StreamController } = await import('../dist/controllers/stream-controller.js');
 const { SourceService } = await import('../dist/services/source-service.js');
 const { RealDebridService } = await import('../dist/services/realdebrid-service.js');
+const { notifyLateResults } = await import('../dist/services/torrent-indexer-shared.js');
 
 const original = {
   fetchStreams: SourceService.fetchStreamsFromAllSources,
@@ -98,4 +99,23 @@ test('stream bloqueado pelo RD depois de guardado some da resposta do cache', as
 
 test('resposta vazia não é guardada', async () => {
   assert.equal(StreamController.cacheControlFor({ streams: [] }), 'no-store');
+});
+
+test('multi atrasado com streams novos descarta a resposta guardada do título', async () => {
+  let calls = 0;
+  SourceService.fetchStreamsFromAllSources = async () => {
+    calls++;
+    return [stream(`r${calls}`, '9'.repeat(40))];
+  };
+  RealDebridService.fetchCachedInfoHashes = async () => new Set();
+  const controller = new StreamController();
+  await controller.handleStreamRequest(rdArgs('tt1000009'));
+  await controller.handleStreamRequest(rdArgs('tt1000010'));
+
+  notifyLateResults('movie', 'tt1000009');
+  const again = await controller.handleStreamRequest(rdArgs('tt1000009'));
+  assert.equal(calls, 3, 'o título avisado busca de novo');
+  assert.ok(again.streams[0].title.includes('r3'), again.streams[0].title);
+  await controller.handleStreamRequest(rdArgs('tt1000010'));
+  assert.equal(calls, 3, 'os outros títulos seguem no cache');
 });
