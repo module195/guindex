@@ -5,7 +5,7 @@
 import type { DebridProvider } from '../models/debrid-model.js';
 import type { SourceStream, StreamContext } from '../models/source-model.js';
 import type { StremioStream, StremioStreamBehaviorHints } from '../models/stream-model.js';
-import { detectReleaseLanguages } from './audio-language.js';
+import { appendFilenameTag, detectReleaseLanguages } from './audio-language.js';
 
 const LANGUAGE_DISPLAY_ALIASES: Record<string, string> = {
   portuguese: 'Portuguese',
@@ -255,8 +255,13 @@ export class StreamService {
     if (sourceStream.seeders != undefined) {
       behaviorHints.seeders = sourceStream.seeders;
     }
-    if (sourceLabelMeta) {
-      behaviorHints.indexer = sourceLabelMeta;
+    // Nome legível para {stream.indexer} no formatter; o slug segue no topo (metadata.indexer).
+    const indexerLabel = sourceStream.indexerLabel?.trim() || sourceLabelMeta;
+    if (indexerLabel) {
+      behaviorHints.indexer = indexerLabel;
+    }
+    if (sourceStream.durationSeconds !== undefined && sourceStream.durationSeconds > 0) {
+      behaviorHints.duration = sourceStream.durationSeconds;
     }
     if (sourceStream.publishDate) {
       behaviorHints.publishDate = sourceStream.publishDate;
@@ -522,14 +527,13 @@ export class StreamService {
     return StreamService.pickFirstLine(stream.title);
   }
 
-  /** Nome cru para behaviorHints.filename: com extensão, sem idioma/tamanho/indexador anexados. */
+  /** Nome cru para behaviorHints.filename: com extensão, sem tamanho/indexador anexados; só a marca de idioma para o AIOStreams. */
   private static pickHintFileName(stream: SourceStream): string | undefined {
     const raw = stream.rawFileName?.trim();
-    if (raw) {
-      return raw;
-    }
     const display = StreamService.pickDisplayFileName(stream);
-    return display ? display.replace(/^.*[\\/]/, '') || undefined : undefined;
+    const name = raw || (display ? display.replace(/^.*[\\/]/, '') || undefined : undefined);
+    // A marca de idioma (PT-BR, Subs.PT-BR) é para o parser do AIOStreams, que só lê idioma daqui.
+    return name ? appendFilenameTag(name, stream.filenameLanguageTag) : undefined;
   }
 
   private static pickFirstLine(value?: string): string | undefined {

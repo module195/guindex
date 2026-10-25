@@ -324,6 +324,8 @@ export interface MatchContext {
   targetTitles: string[];
   releaseYear?: number;
   episodeTitle?: string;
+  /** Duração do título em segundos (runtime do Cinemeta); vai para behaviorHints.duration */
+  runtimeSeconds?: number;
   reqId?: string;
   logName?: string;
 }

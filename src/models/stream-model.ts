@@ -16,6 +16,8 @@ export interface StremioStreamBehaviorHints {
   publishDate?: string;
   folderName?: string;
   folderSize?: number;
+  /** Segundos; o AIOStreams calcula o bitrate a partir dele e do videoSize */
+  duration?: number;
   service?: 'realdebrid' | 'torbox';
   cached?: boolean;
 }
