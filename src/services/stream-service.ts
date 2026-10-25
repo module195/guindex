@@ -532,7 +532,7 @@ export class StreamService {
     const raw = stream.rawFileName?.trim();
     const display = StreamService.pickDisplayFileName(stream);
     const name = raw || (display ? display.replace(/^.*[\\/]/, '') || undefined : undefined);
-    // A marca de idioma (PT-BR, Subs.PT-BR) é para o parser do AIOStreams, que só lê idioma daqui.
+    // A marca de idioma (PT-BR, Subs) é para o parser do AIOStreams, que só lê idioma daqui.
     return name ? appendFilenameTag(name, stream.filenameLanguageTag) : undefined;
   }
 

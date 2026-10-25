@@ -31,7 +31,7 @@ export interface SourceStream {
   indexer?: string;
   /** Nome legível do indexador (e.g. 'Torrent dos Filmes'); vai para behaviorHints.indexer */
   indexerLabel?: string;
-  /** Marca de idioma ("PT-BR", "Subs.PT-BR") anexada só ao behaviorHints.filename */
+  /** Marca de idioma ("PT-BR", "Subs") anexada só ao behaviorHints.filename */
   filenameLanguageTag?: string;
   /** Duração do vídeo em segundos; vai para behaviorHints.duration */
   durationSeconds?: number;

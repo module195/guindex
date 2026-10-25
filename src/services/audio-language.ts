@@ -227,16 +227,16 @@ export function languagesFromAudioValues(values: unknown): string[] {
 // Marcas de português que o parser do AIOStreams (FileParser) reconhece num nome de arquivo.
 // NACIONAL e LEGENDADO não estão aqui: ele ignora o primeiro e lê o segundo como áudio em português.
 const AIOSTREAMS_PT_MARKER = /\b(pt ?br|brazilian|portuguese|portugues|dublado|dublada|dual|multi|por)\b/;
-const AIOSTREAMS_SUBS_MARKER = /\b((pt ?br|portuguese|portugues|por) ?subs?|subs? ?(pt ?br|portuguese|portugues|por))\b/;
+const AIOSTREAMS_SUBS_MARKER = /\b(subs?|subbed)\b/;
 const VIDEO_EXTENSION = /\.(mkv|mp4|avi|m4v|ts|m2ts|iso)$/i;
 
 /**
  * Marca de idioma para anexar ao behaviorHints.filename, que é onde o AIOStreams
  * lê idioma e legenda de um addon custom:
  * - áudio em português sem marca que ele entenda (NACIONAL, ou só o audio[]): "PT-BR";
- * - sem áudio em português e com LEGENDADO no release ou na página: "Subs.PT-BR",
- *   que ele lê como Portuguese (Brazil) com legenda ({stream.subbed}); "PT-BR.Subs"
- *   daria só Portuguese genérico.
+ * - sem áudio em português e com LEGENDADO no release ou na página: "Subs", que ele
+ *   lê como {stream.subbed} sem somar idioma. Qualquer marca com PT-BR/Portuguese/
+ *   Brazilian viraria idioma de áudio (🇧🇷) ou engoliria o grupo do release.
  * O PT-BR também faz o parser somar Portuguese genérico (🇵🇹) ao Portuguese (Brazil).
  */
 export function filenameLanguageTag(fileName: string, languages: string[], hints: string[] = []): string | undefined {
@@ -248,13 +248,19 @@ export function filenameLanguageTag(fileName: string, languages: string[], hints
     return undefined;
   }
   const subtitled = [fileName, ...hints].some((text) => SUBTITLE_MARKER.test(tokenize(stripAudioSuffix(text))));
-  return subtitled ? 'Subs.PT-BR' : undefined;
+  return subtitled ? 'Subs' : undefined;
 }
+
+const LEGENDADO_WORD = /(^|[\s._-])legendad[oa](?=$|[\s._-])/i;
 
 /** Anexa a marca ao nome, antes da extensão, no separador que o nome já usa. */
 export function appendFilenameTag(fileName: string, tag: string | undefined): string {
   if (!tag) {
     return fileName;
+  }
+  // O AIOStreams lê LEGENDADO como áudio em português (bandeira): no lugar dele vai a marca.
+  if (tag === 'Subs' && LEGENDADO_WORD.test(fileName)) {
+    return fileName.replace(LEGENDADO_WORD, `$1${tag}`);
   }
   const extension = fileName.match(VIDEO_EXTENSION)?.[0] ?? '';
   const base = extension ? fileName.slice(0, -extension.length) : fileName;
