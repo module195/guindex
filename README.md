@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/GuickerZ/guindex/main/public/guindex-logo.png" width="180" alt="GuIndex Logo">
+  <img src="https://raw.githubusercontent.com/module195/guindex/main/public/guindex-logo.png" width="180" alt="GuIndex Logo">
 </p>
 
 <p align="center">
@@ -8,9 +8,9 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/GuickerZ/guindex/stargazers"><img src="https://img.shields.io/github/stars/GuickerZ/guindex?style=for-the-badge&color=10b981&labelColor=111118" alt="Stars"></a>
-  <a href="https://github.com/GuickerZ/guindex/issues"><img src="https://img.shields.io/github/issues/GuickerZ/guindex?style=for-the-badge&color=6366f1&labelColor=111118" alt="Issues"></a>
-  <a href="https://github.com/GuickerZ/guindex/blob/main/LICENSE"><img src="https://img.shields.io/github/license/GuickerZ/guindex?style=for-the-badge&color=10b981&labelColor=111118" alt="License"></a>
+  <a href="https://github.com/module195/guindex/stargazers"><img src="https://img.shields.io/github/stars/module195/guindex?style=for-the-badge&color=10b981&labelColor=111118" alt="Stars"></a>
+  <a href="https://github.com/module195/guindex/issues"><img src="https://img.shields.io/github/issues/module195/guindex?style=for-the-badge&color=6366f1&labelColor=111118" alt="Issues"></a>
+  <a href="https://github.com/module195/guindex/blob/main/LICENSE"><img src="https://img.shields.io/github/license/module195/guindex?style=for-the-badge&color=10b981&labelColor=111118" alt="License"></a>
 </p>
 
 <p align="center">
@@ -18,7 +18,7 @@
   <a href="#instalacao">Instalacao</a> &bull;
   <a href="#arquitetura">Arquitetura</a> &bull;
   <a href="#infraestrutura-self-hosted">Infra Self-Hosted</a> &bull;
-  <a href="https://github.com/GuickerZ/guindex/issues">Reportar Bug</a>
+  <a href="https://github.com/module195/guindex/issues">Reportar Bug</a>
 </p>
 
 ---
@@ -105,14 +105,17 @@ Stremio/AIOStreams
 
 ### Mapa de indexers
 
-| Indexer | Status | Velocidade (Pós-Cache) | Notas |
-|---------|:----:|:----------:|-------|
-| `torrent-dos-filmes` | 🟢 Ativo | < 10ms | Excelente para dual-áudio |
-| `starck-filmes` | 🟢 Ativo | < 10ms | Resultados precisos e lançamentos |
-| `vaca_torrent` | 🟢 Ativo | < 10ms | Forte em conteúdo exclusivo |
-| `rede_torrent` | 🟢 Ativo | < 10ms | Bom equilíbrio geral |
-| `bludv` | 🟢 Ativo | < 10ms | Mestre em qualidade 4K / x265 |
-| `comando_torrents` | 🟢 Ativo | < 10ms | O clássico brasileiro |
+| Indexer | Notas |
+|---------|-------|
+| `torrent-dos-filmes` | Excelente para dual-áudio |
+| `rede_torrent` | Bom equilíbrio geral |
+| `comando_torrents` | O clássico brasileiro |
+| `bludv_ru` | Forte em qualidade 4K / x265 |
+| `betor` | |
+| `baixarapido` | |
+| `torrentfilmeshds` | |
+
+> A lista vale para o torrent-indexer do fork ([module195/torrent-indexer](https://github.com/module195/torrent-indexer)); `starck-filmes`, `vaca_torrent` e `bludv` estão desativados lá. O GuIndex lê a lista real e a saúde de cada indexer em `/sources?v=2`.
 
 > Os indexers que nao suportam IMDB recebem queries com titulo textual (EN e PT-BR) em vez de `ttXXXXXXX`. A resolucao PT-BR via TMDB e essencial para maximizar hits nesses indexers.
 
@@ -295,7 +298,7 @@ Acesse **[guindex-stremio.vercel.app](https://guindex-stremio.vercel.app)**, con
 ### Opcao 2: Docker (recomendado para self-host)
 
 ```bash
-git clone https://github.com/GuickerZ/guindex.git
+git clone https://github.com/module195/guindex.git
 cd guindex
 cp .env.example .env
 # Edite .env: defina BASE_URL com seu dominio
@@ -305,7 +308,7 @@ docker compose up -d
 ### Opcao 3: Node.js manual
 
 ```bash
-git clone https://github.com/GuickerZ/guindex.git
+git clone https://github.com/module195/guindex.git
 cd guindex
 npm install
 cp .env.example .env
@@ -407,7 +410,7 @@ npm start
 | `TMDB_PAGES` | `5` | Quantidade de páginas para rodar no `npm run populate:tmdb` |
 | `TORRENT_INDEXER_TMDB_TIMEOUT_MS` | `5000` | Timeout de consulta ao TMDB |
 
-> A chave TMDB e **altamente recomendada**. Sem ela, indexers como `starck-filmes` e `vaca_torrent` (que nao suportam IMDB) terao cobertura muito menor para titulos que diferem entre EN e PT-BR (ex: "Wednesday" → "Wandinha", "Inside Out 2" → "Divertida Mente 2").
+> A chave TMDB e **altamente recomendada**. Sem ela, os indexers que nao suportam IMDB terao cobertura muito menor para titulos que diferem entre EN e PT-BR (ex: "Wednesday" → "Wandinha", "Inside Out 2" → "Divertida Mente 2").
 
 #### Debrid
 
@@ -557,12 +560,12 @@ Contribuicoes sao muito bem-vindas!
 ## Apoie o Projeto
 
 - **Dar uma estrela** neste repositorio e no [torrent-indexer](https://github.com/felipemarinho97/torrent-indexer)
-- **Reportar bugs** nas [issues](https://github.com/GuickerZ/guindex/issues)
+- **Reportar bugs** nas [issues](https://github.com/module195/guindex/issues)
 - **Contribuir com codigo** via Pull Requests
 - **Compartilhar** com outros usuarios brasileiros do Stremio
 
 <p align="center">
-  <a href="https://github.com/GuickerZ/guindex/stargazers"><img src="https://img.shields.io/github/stars/GuickerZ/guindex?style=for-the-badge&color=10b981&labelColor=111118&label=GuIndex" alt="Star GuIndex"></a>
+  <a href="https://github.com/module195/guindex/stargazers"><img src="https://img.shields.io/github/stars/module195/guindex?style=for-the-badge&color=10b981&labelColor=111118&label=GuIndex" alt="Star GuIndex"></a>
   <a href="https://github.com/felipemarinho97/torrent-indexer/stargazers"><img src="https://img.shields.io/github/stars/felipemarinho97/torrent-indexer?style=for-the-badge&color=f59e0b&labelColor=111118&label=torrent-indexer" alt="Star torrent-indexer"></a>
 </p>
 

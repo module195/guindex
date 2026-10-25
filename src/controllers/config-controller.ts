@@ -33,7 +33,7 @@ export class ConfigController {
       resources: ['stream'],
       types: ['movie', 'series'],
       idPrefixes: ['tt'],
-      logo: 'https://raw.githubusercontent.com/GuickerZ/guindex/main/public/logo.png',
+      logo: 'https://raw.githubusercontent.com/module195/guindex/main/public/logo.png',
       behaviorHints: {
         adult: false,
         p2p: false,
@@ -502,13 +502,13 @@ export class ConfigController {
     <div class="divider"></div>
 
     <div style="text-align:center">
-      <a class="star-btn" href="https://github.com/GuickerZ/guindex" target="_blank">&#11088; Dar estrela no GuIndex</a>
+      <a class="star-btn" href="https://github.com/module195/guindex" target="_blank">&#11088; Dar estrela no GuIndex</a>
     </div>
 
     <div class="footer">
       Feito por <a href="https://github.com/GuickerZ" target="_blank">@GuickerZ</a>
-      &bull; <a href="https://github.com/GuickerZ/guindex" target="_blank">Codigo fonte</a>
-      &bull; <a href="https://github.com/GuickerZ/guindex/issues" target="_blank">Reportar bug</a>
+      &bull; <a href="https://github.com/module195/guindex" target="_blank">Codigo fonte</a>
+      &bull; <a href="https://github.com/module195/guindex/issues" target="_blank">Reportar bug</a>
     </div>
   </div>
 
