@@ -110,7 +110,7 @@ export interface MultiCall {
   count?: number;
   duration_ms?: number;
   cache?: string;
-  reason?: string;
+  reason?: string; // timeout + not_started: ficou na fila, não rodou
 }
 
 export interface SearchCacheEntry {
