@@ -138,3 +138,16 @@ test('multi: sub-chamada em timeout entra no histórico com pelo menos o prazo',
   assert.equal(perf.lastDurationMs, 4000);
   assert.equal(perf.hits, 0);
 });
+
+test('multi: sub-chamada que ficou na fila (not_started) ou pegou carona (SHARED) não vira desempenho', () => {
+  const provider = new TorrentIndexerProvider('GuIndex', 'http://127.0.0.1:1');
+  provider.recordMultiCalls(
+    [
+      { indexer: 'starck-filmes', state: 'timeout', reason: 'not_started', duration_ms: 0 },
+      { indexer: 'comando_torrents', state: 'ok', cache: 'SHARED', count: 3, duration_ms: 40 },
+    ],
+    4000,
+  );
+  assert.equal(TorrentIndexerProvider.indexerPerformance.get(provider.normalizeIndexerSlug('starck-filmes')), undefined);
+  assert.equal(TorrentIndexerProvider.indexerPerformance.get(provider.normalizeIndexerSlug('comando_torrents')), undefined);
+});

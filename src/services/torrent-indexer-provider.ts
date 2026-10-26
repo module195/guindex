@@ -1160,8 +1160,9 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
       const durationMs = typeof call.duration_ms === 'number' ? call.duration_ms : 0;
       if (call.state === 'ok') {
         this.clearIndexerFailure(slug);
-        // replay do cache não diz nada sobre a velocidade do site
-        if (call.cache !== 'HIT') {
+        // replay do cache não diz nada sobre a velocidade do site; SHARED pegou
+        // carona numa execução já em andamento e só mostra parte do tempo
+        if (call.cache !== 'HIT' && call.cache !== 'SHARED') {
           this.recordIndexerPerformance(slug, durationMs, call.count ?? 0);
         }
       } else if (call.state === 'error') {
@@ -1170,6 +1171,9 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
           this.recordIndexerFailure(slug);
         }
         this.recordIndexerPerformance(slug, durationMs, 0);
+      } else if (call.state === 'timeout' && call.reason === 'not_started') {
+        // ficou na fila do multi até o prazo, o site nem foi chamado
+        continue;
       } else if (call.state === 'timeout') {
         // A sub-chamada segue rodando no servidor e ainda vai para o cache dele,
         // mas o site foi lento: entra no histórico com pelo menos o prazo, para
