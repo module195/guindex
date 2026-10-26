@@ -244,8 +244,15 @@ export class TorboxService {
 
   private static updateAvailabilityCache(hashes: string[], cached: Set<string>, now: number): void {
     const expires = now + this.INSTANT_AVAILABILITY_TTL_MS;
+    // Reinserir mantém o Map em ordem de vencimento (o TTL é o mesmo para todos):
+    // os vencidos ficam no começo e saem aqui, sem varrer o resto.
     for (const h of hashes) {
+      this.availabilityCache.delete(h);
       this.availabilityCache.set(h, { cached: cached.has(h.toLowerCase()), expires });
+    }
+    for (const [h, entry] of this.availabilityCache) {
+      if (entry.expires > now) break;
+      this.availabilityCache.delete(h);
     }
   }
 

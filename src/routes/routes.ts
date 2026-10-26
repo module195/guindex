@@ -145,7 +145,7 @@ export function setupRoutes() {
       }
 
       const result = await streamController.handleStreamRequest({ type, id, extra });
-      reply.header('cache-control', StreamController.cacheControlFor(result)).send(result);
+      reply.header('cache-control', StreamController.cacheControlFor(result, { type, id })).send(result);
     } catch (error) {
       console.error(`[GuIndex] ❌ Erro no endpoint de stream: ${error instanceof Error ? error.message : 'Unknown error'}`);
       reply.send({ streams: [] });
@@ -184,7 +184,7 @@ export function setupRoutes() {
       }
 
       const result = await streamController.handleStreamRequest({ type, id, extra });
-      reply.header('cache-control', StreamController.cacheControlFor(result)).send(result);
+      reply.header('cache-control', StreamController.cacheControlFor(result, { type, id })).send(result);
     } catch (error) {
       console.error(`[GuIndex] ❌ Erro no endpoint de stream (legacy): ${error instanceof Error ? error.message : 'Unknown error'}`);
       reply.send({ streams: [] });
@@ -223,7 +223,7 @@ export function setupRoutes() {
       }
 
       const result = await streamController.handleStreamRequest({ type, id, extra });
-      reply.header('cache-control', StreamController.cacheControlFor(result)).send(result);
+      reply.header('cache-control', StreamController.cacheControlFor(result, { type, id })).send(result);
     } catch (error) {
       console.error(`[GuIndex] ❌ Erro no endpoint de stream (/provider/token): ${error instanceof Error ? error.message : 'Unknown error'}`);
       reply.send({ streams: [] });

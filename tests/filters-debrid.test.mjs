@@ -327,6 +327,28 @@ test('TorBox: a segunda consulta não sai depois que a consulta antiga respondeu
   }
 });
 
+test('TorBox: respostas vencidas saem do cache de disponibilidade', async () => {
+  const old = '8a'.repeat(20);
+  const fresh = '8b'.repeat(20);
+  const ttl = TorboxService.INSTANT_AVAILABILITY_TTL_MS;
+  // Com o TTL de sempre, o Map fica em ordem de vencimento; os testes anteriores
+  // deixaram entradas de 5 min na frente
+  TorboxService.availabilityCache.clear();
+  TorboxService.INSTANT_AVAILABILITY_TTL_MS = 20;
+  try {
+    torbox.intercept(checkcached).reply(200, { success: true, data: [{ hash: old }] });
+    await TorboxService.checkCachedInfoHashes([old], 'token-vencida');
+    assert.equal(TorboxService.availabilityCache.has(old), true);
+    await sleep(30);
+    torbox.intercept(checkcached).reply(200, { success: true, data: [{ hash: fresh }] });
+    await TorboxService.checkCachedInfoHashes([fresh], 'token-vencida');
+    assert.equal(TorboxService.availabilityCache.has(old), false, 'a vencida sai');
+    assert.equal(TorboxService.knownAvailability(fresh), true);
+  } finally {
+    TorboxService.INSTANT_AVAILABILITY_TTL_MS = ttl;
+  }
+});
+
 test('TorBox: item malformado no checkcached não derruba a consulta', async () => {
   const hash = '4a'.repeat(20);
   torbox.intercept(checkcached).reply(200, { success: true, data: [null, { hash: 123 }, 'x', { hash }] });

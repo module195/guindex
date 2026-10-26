@@ -351,8 +351,9 @@ export function logReq(context: MatchContext | undefined, message: string) {
 }
 
 // Aviso de que o multi terminou depois da resposta e trouxe streams que ela não
-// tinha. Quem guarda a resposta (o cache do /stream) descarta a versão antiga.
-type LateResultsListener = (type: string, id: string) => void;
+// tinha (`hashes`, quando se sabe). Quem guarda a resposta (o cache do /stream)
+// descarta a versão que não os tem.
+type LateResultsListener = (type: string, id: string, hashes?: string[]) => void;
 const lateResultsListeners = new Set<LateResultsListener>();
 
 export function onLateResults(listener: LateResultsListener): () => void {
@@ -360,10 +361,32 @@ export function onLateResults(listener: LateResultsListener): () => void {
   return () => lateResultsListeners.delete(listener);
 }
 
-export function notifyLateResults(type: string, id: string): void {
+// Multi ainda rodando depois da resposta, por título: o que sai agora pode
+// mudar quando ele terminar.
+const lateResultsPending = new Map<string, number>();
+
+/** Marca o multi do título como pendente; a função devolvida desmarca. */
+export function markLateResultsPending(type: string, id: string): () => void {
+  const key = `${type}|${id}`;
+  lateResultsPending.set(key, (lateResultsPending.get(key) ?? 0) + 1);
+  let done = false;
+  return () => {
+    if (done) return;
+    done = true;
+    const left = (lateResultsPending.get(key) ?? 1) - 1;
+    if (left > 0) lateResultsPending.set(key, left);
+    else lateResultsPending.delete(key);
+  };
+}
+
+export function isLateResultsPending(type: string, id: string): boolean {
+  return lateResultsPending.has(`${type}|${id}`);
+}
+
+export function notifyLateResults(type: string, id: string, hashes?: string[]): void {
   for (const listener of lateResultsListeners) {
     try {
-      listener(type, id);
+      listener(type, id, hashes);
     } catch {
       // um ouvinte com erro não impede os outros
     }

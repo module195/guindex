@@ -13,7 +13,7 @@ const { StreamController } = await import('../dist/controllers/stream-controller
 const { SourceService } = await import('../dist/services/source-service.js');
 const { RealDebridService } = await import('../dist/services/realdebrid-service.js');
 const { TorboxService } = await import('../dist/services/torbox-service.js');
-const { notifyLateResults } = await import('../dist/services/torrent-indexer-shared.js');
+const { notifyLateResults, markLateResultsPending } = await import('../dist/services/torrent-indexer-shared.js');
 
 const original = {
   fetchStreams: SourceService.fetchStreamsFromAllSources,
@@ -261,6 +261,7 @@ test('multi atrasado durante a busca: a resposta sai para quem pediu, mas não f
 
   const first = await controller.handleStreamRequest(rdArgs('tt1000017'));
   assert.ok(first.streams[0].title.includes('m1'), first.streams[0].title);
+  assert.equal(StreamController.cacheControlFor(first), 'no-store', 'nem no cache do cliente');
   const second = await controller.handleStreamRequest(rdArgs('tt1000017'));
   assert.equal(calls, 2, 'o pedido seguinte busca de novo');
   assert.ok(second.streams[0].title.includes('m2'), second.streams[0].title);
@@ -321,4 +322,82 @@ test('busca nova parcial atrás de uma completa ainda válida: a substitui quand
   const after = await controller.handleStreamRequest(tbArgs('tt1000019'));
   assert.ok(after.streams[0].title.includes('v2'), after.streams[0].title);
   assert.equal(after.streams[0].behaviorHints.cached, true);
+});
+
+test('multi atrasado com hashes que a busca em andamento já tem: a resposta fica no cache', async () => {
+  const known = '6b'.repeat(20);
+  let calls = 0;
+  SourceService.fetchStreamsFromAllSources = async () => {
+    calls++;
+    if (calls === 1) setTimeout(() => notifyLateResults('movie', 'tt1000020', [known.toUpperCase()]), 10);
+    return [stream(`k${calls}`, known)];
+  };
+  RealDebridService.checkCachedInfoHashes = () => new Promise((resolve) => setTimeout(() => resolve(new Set()), 50));
+  const controller = new StreamController();
+
+  await controller.handleStreamRequest(rdArgs('tt1000020'));
+  const second = await controller.handleStreamRequest(rdArgs('tt1000020'));
+  assert.equal(calls, 1, 'a busca em andamento já tinha o que o multi trouxe');
+  assert.ok(second.streams[0].title.includes('k1'), second.streams[0].title);
+});
+
+test('multi atrasado com hashes que a resposta guardada já tem não a descarta; com hash novo, descarta', async () => {
+  const known = '6c'.repeat(20);
+  let calls = 0;
+  SourceService.fetchStreamsFromAllSources = async () => {
+    calls++;
+    return [stream(`g${calls}`, known)];
+  };
+  RealDebridService.checkCachedInfoHashes = async () => new Set();
+  const controller = new StreamController();
+  await controller.handleStreamRequest(rdArgs('tt1000021'));
+
+  notifyLateResults('movie', 'tt1000021', [known]);
+  await controller.handleStreamRequest(rdArgs('tt1000021'));
+  assert.equal(calls, 1, 'a guardada já tinha o hash');
+
+  notifyLateResults('movie', 'tt1000021', [known, '6d'.repeat(20)]);
+  await controller.handleStreamRequest(rdArgs('tt1000021'));
+  assert.equal(calls, 2, 'hash que a guardada não tem: busca de novo');
+});
+
+test('enquanto o multi do título não termina, a resposta não fica no cache do cliente', async () => {
+  SourceService.fetchStreamsFromAllSources = async () => [stream('p', '6e'.repeat(20))];
+  RealDebridService.checkCachedInfoHashes = async () => new Set();
+  const controller = new StreamController();
+  const title = { type: 'movie', id: 'tt1000022' };
+  const stop = markLateResultsPending(title.type, title.id);
+
+  const result = await controller.handleStreamRequest(rdArgs(title.id));
+  assert.equal(StreamController.cacheControlFor(result, title), 'no-store');
+  stop();
+  assert.match(StreamController.cacheControlFor(result, title), /^private, max-age=/);
+});
+
+test('busca parcial esperando para substituir a completa: o multi atrasado com o que só a completa tem a cancela', async () => {
+  const fourK = '6f'.repeat(20);
+  const hd = '7b'.repeat(20);
+  let withFourK = true;
+  SourceService.fetchStreamsFromAllSources = async () =>
+    withFourK ? [stream('4k', fourK), stream('hd', hd)] : [stream('hd2', hd)];
+  TorboxService.checkCachedInfoHashes = async () => availability([fourK, hd]);
+  const controller = new StreamController();
+  await controller.handleStreamRequest(tbArgs('tt1000023'));
+
+  await sleep(80);
+  withFourK = false;
+  TorboxService.checkCachedInfoHashes = (hashes, token, onAnswer) =>
+    new Promise((resolve) =>
+      setTimeout(() => {
+        onAnswer?.(hd, true);
+        resolve(availability([hd]));
+      }, 600)
+    );
+  await controller.handleStreamRequest(tbArgs('tt1000023'));
+  // A busca sem o 4K sai parcial perto de 400ms e espera a consulta (600ms) para
+  // substituir a completa; o multi atrasado traz o 4K antes disso
+  setTimeout(() => notifyLateResults('movie', 'tt1000023', [fourK]), 480);
+  await sleep(700);
+  const after = await controller.handleStreamRequest(tbArgs('tt1000023'));
+  assert.ok(after.streams.some((s) => s.title.includes('4k')), after.streams.map((s) => s.title).join(','));
 });

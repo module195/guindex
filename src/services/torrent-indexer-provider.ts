@@ -41,6 +41,7 @@ import {
   CACHE_TIMEOUT_MS,
   MULTI_GRACE_MS,
   MULTI_GRACE_NO_4K_MS,
+  markLateResultsPending,
   notifyLateResults,
   PHASE3_MIN_MS,
   PHASE3_MAX_QUERIES,
@@ -370,7 +371,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
         ),
       );
     } else {
-      this.watchLateMultiResults(multiPromise, type, id, fallbackTitle, context, seen);
+      this.watchLateMultiResults(multiPromise, type, id, fallbackTitle, context, seen, cacheTorrents);
     }
 
     // ═══════════════════════════════════════════════════════
@@ -418,7 +419,10 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
   /**
    * O multi passou da janela e a resposta saiu sem ele. Quando ele terminar, se
    * trouxe stream que a resposta não tinha (o 4K raspado em tempo real, por
-   * exemplo), avisa o cache do /stream para não servir a versão antiga.
+   * exemplo), avisa o cache do /stream para não servir a versão antiga. O que
+   * o cache (Fase 1) já tinha e os tetos cortaram não conta: a busca seguinte o
+   * cortaria de novo. Enquanto o multi não termina, a resposta do título não fica
+   * no cache do cliente.
    */
   private watchLateMultiResults(
     multiPromise: Promise<TorrentLike[] | undefined>,
@@ -427,12 +431,24 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     fallbackTitle: string,
     context: MatchContext,
     delivered: Set<string>,
+    cacheTorrents: TorrentLike[],
   ): void {
-    const deliveredKeys = new Set(delivered);
+    const stopPending = markLateResultsPending(type, id);
     void multiPromise
       .then((late) => {
         if (!late || late.length === 0) return;
-        const fresh = this.collectStreamsFromTorrents(late, fallbackTitle, context, deliveredKeys, new Map(), 150);
+        // Só o que a Fase 1 aceitou: uma cópia do cache recusada (ano ou imdb
+        // errado, sem magnet) não impede a cópia certa que o multi trouxe.
+        const inCache = new Set(
+          cacheTorrents
+            .filter((torrent) => this.parser.isRelevantTorrent(torrent, context) && this.mapTorrentToStream(torrent, fallbackTitle, context))
+            .map((torrent) => this.parser.getTorrentDedupKey(torrent)),
+        );
+        const unseen = late.filter((torrent) => {
+          const key = this.parser.getTorrentDedupKey(torrent);
+          return !key || !inCache.has(key);
+        });
+        const fresh = this.collectStreamsFromTorrents(unseen, fallbackTitle, context, new Set(delivered), new Map(), 150);
         if (fresh.length === 0) return;
         const has4K = fresh.some((stream) => stream.quality === '4K');
         logReq(
@@ -440,9 +456,11 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
           `🕒 Multi chegou depois da resposta com ${fresh.length} streams novos${has4K ? ' (com 4K)' : ''}; ` +
             'o próximo pedido busca de novo',
         );
-        notifyLateResults(type, id);
+        const hashes = fresh.map((stream) => this.parser.getStreamInfoHash(stream));
+        notifyLateResults(type, id, hashes.every(Boolean) ? (hashes as string[]) : undefined);
       })
-      .catch(() => undefined);
+      .catch(() => undefined)
+      .finally(stopPending);
   }
 
   /**
