@@ -1730,6 +1730,12 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     stream.infoHash = infoHash.trim().toLowerCase();
   }
 
+  const trackers = (torrent as Record<string, unknown>).trackers;
+  if (Array.isArray(trackers)) {
+    const list = trackers.filter((value): value is string => typeof value === 'string' && value.trim() !== '');
+    if (list.length > 0) stream.trackers = list;
+  }
+
   // fileIdx só vem de files[] (selectBestTorrentFile). Sem a lista, não há como saber
   // a posição do episódio no torrent: um índice chutado gera a chave hash:fileIdx errada
   // no deduplicador do AIOStreams e pode abrir o arquivo errado no debrid. O resolve do
