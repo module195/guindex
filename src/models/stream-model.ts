@@ -29,6 +29,8 @@ export interface StremioStream {
   url: string;
   behaviorHints?: StremioStreamBehaviorHints;
   infoHash?: string;
+  /** Trackers (`tracker:udp://…`) e nó DHT (`dht:<hash>`) para achar peers do infoHash */
+  sources?: string[];
   fileIdx?: number;
   externalUrl?: string;
   size?: number;

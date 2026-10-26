@@ -7,6 +7,9 @@ import type { SourceStream, StreamContext } from '../models/source-model.js';
 import type { StremioStream, StremioStreamBehaviorHints } from '../models/stream-model.js';
 import { appendFilenameTag, detectReleaseLanguages } from './audio-language.js';
 
+/** Limite de trackers por stream: o bastante para achar peers sem inchar a resposta */
+const MAX_STREAM_TRACKERS = 15;
+
 const LANGUAGE_DISPLAY_ALIASES: Record<string, string> = {
   portuguese: 'Portuguese',
   portugues: 'Portuguese',
@@ -203,6 +206,9 @@ export class StreamService {
     // Reconfigure Service só atua em streams debrid com infoHash.
     if (infoHash) {
       metadata.infoHash = infoHash;
+      // Sem sources o Stremio acha peers só pelo DHT, e o AIOStreams (Service Wrap)
+      // adiciona o magnet no debrid sem trackers
+      metadata.sources = StreamService.buildSources(sourceStream, infoHash);
     }
     if (sourceStream.size != undefined) {
       metadata.size = sourceStream.size;
@@ -420,6 +426,30 @@ export class StreamService {
     if (hasRu) codes.push('RU');
     if (hasHi) codes.push('HI');
     return codes;
+  }
+
+  /**
+   * `sources` do objeto Stream do Stremio: os trackers do release (os do magnet e os
+   * que o indexer listou), sem repetição, e o nó DHT do próprio hash.
+   */
+  static buildSources(stream: SourceStream, infoHash: string): string[] {
+    const trackers: string[] = [];
+    const seen = new Set<string>();
+    const add = (raw: string | undefined) => {
+      const tracker = raw?.trim();
+      if (!tracker || !/^(udp|https?):\/\//i.test(tracker)) return;
+      const key = tracker.toLowerCase();
+      if (seen.has(key) || trackers.length >= MAX_STREAM_TRACKERS) return;
+      seen.add(key);
+      trackers.push(tracker);
+    };
+    const magnet = stream.magnet || (stream.url?.startsWith('magnet:') ? stream.url : undefined);
+    if (magnet) {
+      const query = magnet.slice(magnet.indexOf('?') + 1);
+      for (const value of new URLSearchParams(query).getAll('tr')) add(value);
+    }
+    for (const tracker of stream.trackers ?? []) add(tracker);
+    return [...trackers.map((tracker) => `tracker:${tracker}`), `dht:${infoHash}`];
   }
 
   private static extractInfoHash(stream: SourceStream): string | undefined {

@@ -89,9 +89,12 @@ export class TorboxService {
 
   private client: TorboxClient;
   private waitVideoUrl?: string;
+  /** IP público do usuário: o TorBox escolhe o CDN mais perto dele, não do servidor */
+  private userIp?: string;
 
-  constructor(private token: string) {
+  constructor(private token: string, options?: { userIp?: string }) {
     this.client = new TorboxClient({ token });
+    this.userIp = options?.userIp;
     const config = ConfigService.loadConfig();
     this.waitVideoUrl = config.waitVideoUrl;
   }
@@ -288,14 +291,14 @@ export class TorboxService {
           // 1) with fileId (if available)
           if (fileId !== undefined) {
             const link = await this.safeCall(() =>
-              this.client.requestDownloadLink({ torrentId: torrent_id, fileId })
+              this.client.requestDownloadLink({ torrentId: torrent_id, fileId, userIp: this.userIp })
             );
             if (link) return link;
             if (strictFile) return undefined;
           }
           // 2) without fileId
           const linkNoId = await this.safeCall(() =>
-            this.client.requestDownloadLink({ torrentId: torrent_id })
+            this.client.requestDownloadLink({ torrentId: torrent_id, userIp: this.userIp })
           );
           if (linkNoId) return linkNoId;
           // 3) iterate other files by size desc
@@ -304,7 +307,7 @@ export class TorboxService {
             .sort((a, b) => (b.size ?? 0) - (a.size ?? 0));
           for (const f of filesBySize) {
             const link = await this.safeCall(() =>
-              this.client.requestDownloadLink({ torrentId: torrent_id, fileId: f.id })
+              this.client.requestDownloadLink({ torrentId: torrent_id, fileId: f.id, userIp: this.userIp })
             );
             if (link) return link;
           }
@@ -411,7 +414,7 @@ export class TorboxService {
         const ready = this.isReady(web);
         if (file?.id !== undefined) {
           const link = await this.safeCall(() =>
-            this.client.requestWebDlLink({ webId: webdownload_id, fileId: file.id })
+            this.client.requestWebDlLink({ webId: webdownload_id, fileId: file.id, userIp: this.userIp })
           );
           if (link) {
             const effectiveReady = ready && !this.isWaitingLikeLink(link);
@@ -421,7 +424,7 @@ export class TorboxService {
 
         if (file?.id === undefined) {
           const linkNoFile = await this.safeCall(() =>
-            this.client.requestWebDlLink({ webId: webdownload_id })
+            this.client.requestWebDlLink({ webId: webdownload_id, userIp: this.userIp })
           );
           if (linkNoFile) {
             const effectiveReady = ready && !this.isWaitingLikeLink(linkNoFile);

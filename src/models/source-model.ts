@@ -38,6 +38,8 @@ export interface SourceStream {
   url?: string;
   magnet?: string;
   infoHash?: string;
+  /** Trackers do release (os do magnet e os que o indexer listou) */
+  trackers?: string[];
   fileIdx?: number;
   size?: number;
   seeders?: number;

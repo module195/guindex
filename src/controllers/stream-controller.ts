@@ -51,6 +51,10 @@ const parseNonNegativeInt = (value: string | undefined, fallback: number): numbe
 const STREAM_CACHE_TTL_MS = parseNonNegativeInt(process.env.STREAM_CACHE_TTL_MS, 2 * 60 * 1000);
 const STREAM_CACHE_STALE_MS = parseNonNegativeInt(process.env.STREAM_CACHE_STALE_MS, 30 * 60 * 1000);
 const STREAM_CACHE_MAX_ENTRIES = 500;
+// Link de CDN já resolvido: retomar, trocar de player ou o pedido de teste do
+// AIOStreams não refazem o caminho no debrid. Curto porque o link não é permanente.
+const PLAYBACK_LINK_TTL_MS = parseNonNegativeInt(process.env.PLAYBACK_LINK_TTL_MS, 20 * 60 * 1000);
+const PLAYBACK_LINK_CACHE_MAX = 500;
 
 interface StreamCacheEntry {
   response: StreamResponse;
@@ -535,31 +539,96 @@ export class StreamController {
   /**
    * Processes a link (magnet or WebDL URL) through the selected debrid provider when user actually plays the stream.
    */
+  /** Link pronto do resolve, por provedor|token|item|contexto|IP */
+  private static playbackLinks = new Map<string, { url: string; expires: number }>();
+  /** Resolve em andamento: pedido igual espera o mesmo, sem criar o torrent duas vezes */
+  private static playbackInFlight = new Map<string, Promise<{ url: string; ready: boolean }>>();
+
+  private static playbackKey(params: {
+    magnet?: string;
+    url?: string;
+    token: string;
+    provider: DebridProvider;
+    context?: StreamContext;
+    userIp?: string;
+  }): string {
+    const { magnet, url, token, provider, context, userIp } = params;
+    const hash = magnet?.match(/xt=urn:btih:([^&]+)/i)?.[1]?.trim().toLowerCase();
+    const item = hash ? `btih:${hash}` : magnet ?? `url:${url ?? ''}`;
+    return [provider, token, item, StreamService.encodeStreamContext(context) ?? '', userIp ?? ''].join('|');
+  }
+
+  private static rememberPlaybackLink(key: string, url: string): void {
+    const now = Date.now();
+    if (StreamController.playbackLinks.size >= PLAYBACK_LINK_CACHE_MAX) {
+      for (const [k, entry] of StreamController.playbackLinks) {
+        if (entry.expires <= now) StreamController.playbackLinks.delete(k);
+      }
+      // Ainda cheio: sai o mais antigo (o Map guarda a ordem de inserção)
+      while (StreamController.playbackLinks.size >= PLAYBACK_LINK_CACHE_MAX) {
+        const oldest = StreamController.playbackLinks.keys().next().value;
+        if (oldest === undefined) break;
+        StreamController.playbackLinks.delete(oldest);
+      }
+    }
+    StreamController.playbackLinks.set(key, { url, expires: now + PLAYBACK_LINK_TTL_MS });
+  }
+
   async processLinkForPlayback(params: {
     magnet?: string;
     url?: string;
     token: string;
     provider: DebridProvider;
     context?: StreamContext;
+    /** IP público do usuário, para o debrid escolher o CDN mais perto */
+    userIp?: string;
   }): Promise<string> {
-    const { magnet, url, token, provider, context } = params;
-
-    if (!token) {
+    if (!params.token) {
       throw new Error('Debrid token is required for playback');
     }
+
+    const key = StreamController.playbackKey(params);
+    const cached = StreamController.playbackLinks.get(key);
+    if (cached && cached.expires > Date.now()) {
+      console.debug(`Reusing resolved ${params.provider} link`);
+      return cached.url;
+    }
+
+    let pending = StreamController.playbackInFlight.get(key);
+    if (!pending) {
+      pending = this.resolvePlayback(params).finally(() => StreamController.playbackInFlight.delete(key));
+      StreamController.playbackInFlight.set(key, pending);
+    }
+    const result = await pending;
+    // O vídeo de espera não fica guardado: o próximo play tenta de novo
+    if (result.ready && PLAYBACK_LINK_TTL_MS > 0) {
+      StreamController.rememberPlaybackLink(key, result.url);
+    }
+    return result.url;
+  }
+
+  private async resolvePlayback(params: {
+    magnet?: string;
+    url?: string;
+    token: string;
+    provider: DebridProvider;
+    context?: StreamContext;
+    userIp?: string;
+  }): Promise<{ url: string; ready: boolean }> {
+    const { magnet, url, token, provider, context, userIp } = params;
 
     try {
       console.debug(`Processing link for playback via ${provider}`);
 
       if (provider === 'torbox') {
-        const service = new TorboxService(token);
+        const service = new TorboxService(token, { userIp });
         if (url && !magnet) {
           const result = await service.processWebDlToDirectUrl(url, context);
-          return result.url;
+          return { url: result.url, ready: result.ready };
         }
         if (!magnet) throw new Error('Magnet is required for torrent playback');
         const result = await service.processMagnetToDirectUrl(magnet, context);
-        return result.url;
+        return { url: result.url, ready: result.ready };
       }
 
       // RealDebrid only supports torrents here
@@ -567,7 +636,7 @@ export class StreamController {
         throw new Error('Magnet is required for Real-Debrid playback');
       }
       const directUrl = await new RealDebridService(token).processMagnetToDirectUrl(magnet, context);
-      return directUrl;
+      return { url: directUrl, ready: !directUrl.includes('/placeholder/') };
     } catch (error) {
       console.error(`Failed to process link for playback: ${error instanceof Error ? error.message : 'Unknown error'}`);
       throw error;

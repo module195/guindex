@@ -13,13 +13,16 @@ import { StreamController } from '../controllers/stream-controller.js';
 import { ConfigService } from '../services/config-service.js';
 import { RealDebridBlockedError } from '../services/realdebrid-service.js';
 import { StreamService } from '../services/stream-service.js';
+import { publicClientIp } from '../services/client-ip.js';
 import type { StreamRequest } from '../models/stream-model.js';
 
 const { addonBuilder } = stremioAddonSdk;
 
 export function setupRoutes() {
   const config = ConfigService.loadConfig();
-  const fastify = Fastify({ logger: false });
+  // Atrás do proxy do Easypanel: req.ip vem do X-Forwarded-For, o IP do usuário
+  // que o TorBox usa para escolher o CDN
+  const fastify = Fastify({ logger: false, trustProxy: true });
 
   // Register CORS plugin
 
@@ -245,7 +248,8 @@ export function setupRoutes() {
     originalUrl?: string,
     provider?: string,
     linkType?: string,
-    ctx?: string
+    ctx?: string,
+    userIp?: string
   ) => {
     try {
       const context = StreamService.decodeStreamContext(ctx);
@@ -260,7 +264,8 @@ export function setupRoutes() {
           url: originalUrl,
           token,
           provider: resolvedProvider,
-          context
+          context,
+          userIp
         });
         reply.redirect(directUrl);
         return;
@@ -275,7 +280,8 @@ export function setupRoutes() {
         magnet,
         token,
         provider: resolvedProvider,
-        context
+        context,
+        userIp
       });
       reply.redirect(directUrl);
     } catch (error) {
@@ -318,6 +324,7 @@ export function setupRoutes() {
         const { token, magnet, provider, ctx } = extractor(req);
         const linkType = (req.query as any)?.linkType as string | undefined;
         const originalUrl = (req.query as any)?.url as string | undefined;
+        const userIp = publicClientIp(req.ip);
 
         if (!token) {
           reply.status(400).send({ error: 'Debrid token is required' });
@@ -329,7 +336,7 @@ export function setupRoutes() {
             reply.status(400).send({ error: 'URL is required for TorBox WebDL' });
             return;
           }
-          await handleResolveRequest(reply, token, undefined, originalUrl, provider, linkType, ctx);
+          await handleResolveRequest(reply, token, undefined, originalUrl, provider, linkType, ctx, userIp);
           console.info(`[GuIndex] 🔗 Resolve (${provider}/${linkType}) finalizado em ${Date.now() - started}ms`);
           return;
         }
@@ -339,7 +346,7 @@ export function setupRoutes() {
           return;
         }
 
-        await handleResolveRequest(reply, token, magnet, undefined, provider, linkType, ctx);
+        await handleResolveRequest(reply, token, magnet, undefined, provider, linkType, ctx, userIp);
         console.info(`[GuIndex] 🔗 Resolve (${provider}/${linkType}) finalizado em ${Date.now() - started}ms`);
       }
     });
