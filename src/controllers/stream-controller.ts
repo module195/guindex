@@ -10,6 +10,7 @@ import { SourceService } from '../services/source-service.js';
 import { StreamService } from '../services/stream-service.js';
 import { ConfigService } from '../services/config-service.js';
 import { TorboxService } from '../services/torbox-service.js';
+import { formatSteps, withPlaybackTiming } from '../services/playback-timing.js';
 import {
   DEBRID_MAX_WAIT_MS,
   REQUEST_BUDGET_MS,
@@ -590,13 +591,13 @@ export class StreamController {
     const key = StreamController.playbackKey(params);
     const cached = StreamController.playbackLinks.get(key);
     if (cached && cached.expires > Date.now()) {
-      console.debug(`Reusing resolved ${params.provider} link`);
+      console.info(`[GuIndex] ⏱️ Play (${params.provider}): link do cache`);
       return cached.url;
     }
 
     let pending = StreamController.playbackInFlight.get(key);
     if (!pending) {
-      pending = this.resolvePlayback(params).finally(() => StreamController.playbackInFlight.delete(key));
+      pending = this.timedResolvePlayback(params).finally(() => StreamController.playbackInFlight.delete(key));
       StreamController.playbackInFlight.set(key, pending);
     }
     const result = await pending;
@@ -605,6 +606,23 @@ export class StreamController {
       StreamController.rememberPlaybackLink(key, result.url);
     }
     return result.url;
+  }
+
+  /** resolvePlayback com uma linha de log do tempo de cada etapa (lista, criar, pedir link, esperas). */
+  private async timedResolvePlayback(params: Parameters<StreamController['resolvePlayback']>[0]): Promise<{ url: string; ready: boolean }> {
+    const started = Date.now();
+    const { steps, done } = withPlaybackTiming(() => this.resolvePlayback(params));
+    let outcome = 'erro';
+    try {
+      const result = await done;
+      outcome = result.ready ? 'pronto' : 'vídeo de espera';
+      return result;
+    } finally {
+      const detail = formatSteps(steps);
+      console.info(
+        `[GuIndex] ⏱️ Play (${params.provider}) ${outcome} em ${Date.now() - started}ms${detail ? `: ${detail}` : ''}`
+      );
+    }
   }
 
   private async resolvePlayback(params: {
