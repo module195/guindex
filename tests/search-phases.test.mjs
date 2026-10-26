@@ -401,3 +401,26 @@ test('Fase 3: multi indisponível repete também as queries do mid-path', async 
   assert.equal(streams.length, 1);
   assert.equal(srv.calls.filter((u) => u.pathname === '/indexers/multi').length, 0);
 });
+
+test('Fase 1: série manda season/episode só na query de IMDb', async (t) => {
+  const SERIES = 'tt0903747';
+  TorrentIndexerProvider.cinemetaCache.set(`series:${SERIES}`, { data: { name: 'Breaking Bad', year: 2008 }, ts: Date.now() });
+  TorrentIndexerProvider.localizedTitleCache.set(SERIES, { ts: Date.now(), titles: ['Breaking Bad'] });
+  const srv = await startServer({
+    '/sources': async () => [200, SOURCES_V2],
+    '/search': async () => [200, { results: [] }],
+    '/indexers/multi': async () => [200, multiPayload([])],
+  });
+  t.after(srv.close);
+  const provider = new TorrentIndexerProvider('GuIndex', srv.base);
+
+  await provider.getStreams('series', `${SERIES}:5:3`);
+  const searches = srv.calls.filter((u) => u.pathname === '/search');
+  const imdb = searches.filter((u) => u.searchParams.get('q') === SERIES);
+  assert.equal(imdb.length, 1);
+  assert.equal(imdb[0].searchParams.get('season'), '5');
+  assert.equal(imdb[0].searchParams.get('episode'), '3');
+  for (const u of searches.filter((u) => u.searchParams.get('q') !== SERIES)) {
+    assert.equal(u.searchParams.get('season'), null, `texto não filtra: ${u.searchParams.get('q')}`);
+  }
+});

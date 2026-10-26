@@ -334,6 +334,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     const cacheTorrents = await this.fetchBulkMeilisearchResults(
       uniqueQueries.slice(0, MAX_CACHE_QUERIES),
       Math.min(CACHE_TIMEOUT_MS, Math.max(500, remainingMs())),
+      type.toLowerCase() === 'movie' ? undefined : { season: parsed.season, episode: parsed.episode },
     );
     const cacheSufficient = this.hasSufficientResults(cacheTorrents, fallbackTitle, context);
     const streams = this.collectStreamsFromTorrents(cacheTorrents, fallbackTitle, context, seen, sourceCounts, 150);
@@ -973,8 +974,15 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
   /**
    * Uma chamada /search por query, em paralelo: o /search do torrent-indexer
    * lê só o primeiro q, então várias q numa chamada só pesquisavam o IMDb.
+   * Na query de IMDb de série vão season/episode: o IMDb traz todas as
+   * temporadas e o servidor filtra antes do limit, então o episódio pedido
+   * não fica de fora numa série com centenas de torrents.
    */
-  private async fetchBulkMeilisearchResults(queries: string[], timeoutMs = 8000): Promise<TorrentLike[]> {
+  private async fetchBulkMeilisearchResults(
+    queries: string[],
+    timeoutMs = 8000,
+    seriesTarget?: { season?: number; episode?: number },
+  ): Promise<TorrentLike[]> {
     const uniqueQueries = [...new Set(queries.map((q) => q.trim()).filter((q) => q.length > 0))];
     if (uniqueQueries.length === 0) return [];
 
@@ -983,6 +991,10 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
         const url = new URL(`${this.baseUrl}/search`);
         url.searchParams.set('q', q);
         url.searchParams.set('limit', '200');
+        if (seriesTarget?.season !== undefined && IMDB_QUERY_REGEX.test(q)) {
+          url.searchParams.set('season', String(seriesTarget.season));
+          if (seriesTarget.episode !== undefined) url.searchParams.set('episode', String(seriesTarget.episode));
+        }
         try {
           const response = await request(url.toString(), {
             method: 'GET',
