@@ -4,6 +4,7 @@
  */
 
 import { getGlobalDispatcher, interceptors, request, type Dispatcher } from 'undici';
+import { timeStep } from './playback-timing.js';
 
 /**
  * undici 7 tirou `maxRedirections` do request(); o redirect agora é um interceptor.
@@ -178,23 +179,31 @@ export class TorboxClient {
   }
 
   async createTorrent(magnet: string): Promise<{ torrent_id: number; hash: string }> {
-    return this.post<{ torrent_id: number; hash: string }>('/v1/api/torrents/createtorrent', {
-      magnet,
-      allow_zip: false
-    });
+    return timeStep('criar', () =>
+      this.post<{ torrent_id: number; hash: string }>('/v1/api/torrents/createtorrent', {
+        magnet,
+        allow_zip: false
+      })
+    );
   }
 
   /** Torrents da conta (sem id); o mylist sem id devolve uma lista. */
   async listTorrents(limit = 1000): Promise<TorboxTorrent[]> {
-    const data = await this.get<TorboxTorrent[] | TorboxTorrent>('/v1/api/torrents/mylist', { limit });
+    const data = await timeStep('lista_conta', () =>
+      this.get<TorboxTorrent[] | TorboxTorrent>('/v1/api/torrents/mylist', { limit })
+    );
     return Array.isArray(data) ? data : [];
   }
 
   async getTorrent(id: number): Promise<TorboxTorrent> {
-    return this.get<TorboxTorrent>('/v1/api/torrents/mylist', { id, bypass_cache: true });
+    return timeStep('mylist', () => this.get<TorboxTorrent>('/v1/api/torrents/mylist', { id, bypass_cache: true }));
   }
 
   async requestDownloadLink(params: { torrentId: number; fileId?: number; userIp?: string }): Promise<string> {
+    return timeStep('requestdl', () => this.fetchDownloadLink(params));
+  }
+
+  private async fetchDownloadLink(params: { torrentId: number; fileId?: number; userIp?: string }): Promise<string> {
     const url = new URL(this.baseUrl + '/v1/api/torrents/requestdl');
     url.searchParams.set('token', this.token);
     url.searchParams.set('torrent_id', String(params.torrentId));
@@ -254,18 +263,24 @@ export class TorboxClient {
   }
 
   async createWebDl(link: string, name?: string): Promise<{ webdownload_id: number; hash: string }> {
-    return this.post<{ webdownload_id: number; hash: string }>('/v1/api/webdl/createwebdownload', {
-      link,
-      name: name ?? '',
-      as_queued: false
-    });
+    return timeStep('criar', () =>
+      this.post<{ webdownload_id: number; hash: string }>('/v1/api/webdl/createwebdownload', {
+        link,
+        name: name ?? '',
+        as_queued: false
+      })
+    );
   }
 
   async getWebDl(id: number): Promise<TorboxWebDl> {
-    return this.get<TorboxWebDl>('/v1/api/webdl/mylist', { id, bypass_cache: true });
+    return timeStep('mylist', () => this.get<TorboxWebDl>('/v1/api/webdl/mylist', { id, bypass_cache: true }));
   }
 
   async requestWebDlLink(params: { webId: number; fileId?: number; userIp?: string }): Promise<string> {
+    return timeStep('requestdl', () => this.fetchWebDlLink(params));
+  }
+
+  private async fetchWebDlLink(params: { webId: number; fileId?: number; userIp?: string }): Promise<string> {
     const url = new URL(this.baseUrl + '/v1/api/webdl/requestdl');
     url.searchParams.set('token', this.token);
     url.searchParams.set('web_id', String(params.webId));

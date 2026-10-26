@@ -14,6 +14,7 @@
 
 import { request } from 'undici';
 import { ConfigService } from './config-service.js';
+import { timeStep, timedSleep } from './playback-timing.js';
 import type { TorrentInfo, MagnetResponse, UnrestrictResponse } from '../models/realdebrid-model.js';
 import type { StreamContext } from '../models/source-model.js';
 
@@ -33,6 +34,12 @@ interface AccountHashesCacheEntry {
 const API_BASE = 'https://api.real-debrid.com/rest/1.0';
 const REQUEST_TIMEOUT_MS = 15_000;
 const MIN_VIDEO_BYTES = 5 * 1024 * 1024; // 5 MB – anything smaller is junk
+/** Esperas entre consultas enquanto o RD converte o magnet (~6 s no total). */
+const RD_CONVERSION_POLL_DELAYS_MS = [500, 1000, 1500, 1500, 1500];
+/** Esperas entre consultas depois do selectFiles (5 s no total, como a espera fixa de antes). */
+const RD_READY_POLL_DELAYS_MS = [500, 1000, 1500, 2000];
+/** Status do RD em que esperar mais não adianta. */
+const RD_FAILED_STATUSES = new Set(['magnet_error', 'error', 'virus', 'dead']);
 
 // Video extensions accepted as playable media
 const VIDEO_EXTENSIONS =
@@ -144,6 +151,10 @@ export class RealDebridService {
   // ── Public API ──────────────────────────────────────────────────────────
 
   async addMagnet(magnet: string): Promise<MagnetResponse> {
+    return timeStep('add', () => this.addMagnetRequest(magnet));
+  }
+
+  private async addMagnetRequest(magnet: string): Promise<MagnetResponse> {
     const response = await request(`${API_BASE}/torrents/addMagnet`, {
       method: 'POST',
       headers: {
@@ -164,6 +175,10 @@ export class RealDebridService {
   }
 
   async selectFiles(torrentId: string, fileIds: string): Promise<void> {
+    return timeStep('selecionar', () => this.selectFilesRequest(torrentId, fileIds));
+  }
+
+  private async selectFilesRequest(torrentId: string, fileIds: string): Promise<void> {
     const response = await request(`${API_BASE}/torrents/selectFiles/${torrentId}`, {
       method: 'POST',
       headers: {
@@ -182,6 +197,10 @@ export class RealDebridService {
   }
 
   async getTorrentInfo(torrentId: string): Promise<TorrentInfo> {
+    return timeStep('info', () => this.getTorrentInfoRequest(torrentId));
+  }
+
+  private async getTorrentInfoRequest(torrentId: string): Promise<TorrentInfo> {
     const response = await request(`${API_BASE}/torrents/info/${torrentId}`, {
       headers: { 'Authorization': `Bearer ${this.token}` },
       headersTimeout: REQUEST_TIMEOUT_MS,
@@ -197,6 +216,10 @@ export class RealDebridService {
   }
 
   async unrestrictLink(link: string): Promise<UnrestrictResponse> {
+    return timeStep('unrestrict', () => this.unrestrictLinkRequest(link));
+  }
+
+  private async unrestrictLinkRequest(link: string): Promise<UnrestrictResponse> {
     const response = await request(`${API_BASE}/unrestrict/link`, {
       method: 'POST',
       headers: {
@@ -361,10 +384,10 @@ export class RealDebridService {
 
     const { id: torrentId } = await this.addMagnet(magnet);
 
-    const torrentInfo = await this.getTorrentInfo(torrentId);
+    const torrentInfo = await this.waitForMagnetConversion(torrentId);
 
     if (!torrentInfo.files || torrentInfo.files.length === 0) {
-      throw new Error(`No files found in torrent: ${torrentId}`);
+      throw new Error(`No files found in torrent: ${torrentId} (status ${torrentInfo.status})`);
     }
 
     const selectedFile = this.selectBestFile(torrentInfo.files, context);
@@ -377,22 +400,40 @@ export class RealDebridService {
     // Select file in RD
     await this.selectFiles(torrentId, String(selectedFile.id));
 
-    // Check if already downloaded
-    const currentInfo = await this.getTorrentInfo(torrentId);
-    if (currentInfo.status === 'downloaded') {
-      return await this.getDirectDownloadUrl(torrentId);
+    // Cacheado no RD vira "downloaded" em pouco tempo: consultas curtas devolvem o
+    // link assim que fica pronto, em vez de uma espera fixa.
+    let currentInfo = await this.getTorrentInfo(torrentId);
+    for (const delay of RD_READY_POLL_DELAYS_MS) {
+      if (currentInfo.status === 'downloaded') break;
+      if (RD_FAILED_STATUSES.has(currentInfo.status)) {
+        throw new Error(`Real-Debrid torrent ${torrentId} failed: ${currentInfo.status}`);
+      }
+      await timedSleep(delay);
+      currentInfo = await this.getTorrentInfo(torrentId);
     }
-
-    // Not downloaded yet, wait and retry
-    await new Promise(resolve => setTimeout(resolve, 5000));
-
-    const retryInfo = await this.getTorrentInfo(torrentId);
-    if (retryInfo.status === 'downloaded') {
-      return await this.getDirectDownloadUrl(torrentId);
+    if (currentInfo.status === 'downloaded') {
+      return await this.getDirectDownloadUrl(torrentId, currentInfo);
     }
 
     // Still not ready, return placeholder video URL
     return this.createPlaceholderUrl(torrentId);
+  }
+
+  /**
+   * Logo depois do addMagnet o RD pode ainda estar convertendo o magnet
+   * (magnet_conversion), sem a lista de arquivos. Consulta de novo até a lista sair.
+   */
+  private async waitForMagnetConversion(torrentId: string): Promise<TorrentInfo> {
+    let info = await this.getTorrentInfo(torrentId);
+    for (const delay of RD_CONVERSION_POLL_DELAYS_MS) {
+      if (info.files?.length || info.status !== 'magnet_conversion') break;
+      await timedSleep(delay);
+      info = await this.getTorrentInfo(torrentId);
+    }
+    if (RD_FAILED_STATUSES.has(info.status)) {
+      throw new Error(`Real-Debrid torrent ${torrentId} failed: ${info.status}`);
+    }
+    return info;
   }
 
   /**
@@ -404,7 +445,8 @@ export class RealDebridService {
     if (!hash) {
       return undefined;
     }
-    const torrentId = (await RealDebridService.getAccountDownloadedTorrents(this.token))?.get(hash);
+    const accountTorrents = await timeStep('lista_conta', () => RealDebridService.getAccountDownloadedTorrents(this.token));
+    const torrentId = accountTorrents?.get(hash);
     if (!torrentId) {
       return undefined;
     }
@@ -427,8 +469,9 @@ export class RealDebridService {
     return download;
   }
 
-  private async getDirectDownloadUrl(torrentId: string): Promise<string> {
-    const finalInfo = await this.getTorrentInfo(torrentId);
+  /** `info` é o info já consultado com status downloaded; poupa uma consulta quando traz os links. */
+  private async getDirectDownloadUrl(torrentId: string, info?: TorrentInfo): Promise<string> {
+    const finalInfo = info?.links?.length ? info : await this.getTorrentInfo(torrentId);
 
     if (!finalInfo.links || finalInfo.links.length === 0) {
       throw new Error(`No download links available for torrent: ${torrentId}`);

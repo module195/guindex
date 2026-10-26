@@ -13,6 +13,7 @@
 import { ConfigService } from './config-service.js';
 import type { StreamContext } from '../models/source-model.js';
 import { TorboxClient, type TorboxFile, type TorboxTorrent, type TorboxWebDl } from './torbox-client.js';
+import { timedSleep } from './playback-timing.js';
 
 type AvailabilityCacheEntry = { cached: boolean; expires: number };
 type AvailabilityInFlight = { answer: Promise<boolean | undefined>; startedAt: number };
@@ -338,7 +339,7 @@ export class TorboxService {
 
       const attemptDelays = [0, 1000, 2500]; // faster second click (~2-3s total)
       for (const delay of attemptDelays) {
-        if (delay > 0) await this.sleep(delay);
+        if (delay > 0) await timedSleep(delay);
         const res = await attempt();
         if (res) return res;
       }
@@ -437,11 +438,11 @@ export class TorboxService {
       const immediate = await attempt();
       if (immediate) return immediate;
 
-      await this.sleep(2000);
+      await timedSleep(2000);
       const retry = await attempt();
       if (retry) return retry;
 
-      await this.sleep(3000);
+      await timedSleep(3000);
       const retry2 = await attempt();
       if (retry2) return retry2;
 
@@ -482,9 +483,6 @@ export class TorboxService {
     return /downloading\.mp4|wait|waiting|processing|placeholder/.test(normalized);
   }
 
-  private sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-  }
 
   // ── File Selection Engine ───────────────────────────────────────────────
 
