@@ -2024,7 +2024,16 @@ export class TorrentParser {
       record.peer ??
       record.peerCount;
 
-    return this.toNumber(candidate);
+    const seeds = this.toNumber(candidate);
+    // O torrent-indexer manda 0 seeders e 0 leechers quando o scrape do tracker
+    // falhou ou foi pulado (trackers mortos de releases antigos). Isso é
+    // "desconhecido", não "morto": com seeders: 0, o filtro de seeders do
+    // AIOStreams esconde um torrent que o debrid ainda consegue baixar.
+    if (seeds === 0) {
+      const leechers = this.toNumber(record.leech_count ?? record.leechers ?? record.leechCount);
+      if (leechers === 0) return undefined;
+    }
+    return seeds;
   }
 
   extractSize(torrent: TorrentLike): number | undefined {
