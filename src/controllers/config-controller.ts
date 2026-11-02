@@ -6,6 +6,23 @@
 import type { AddonManifest } from '../models/config-model.js';
 import { ConfigService } from '../services/config-service.js';
 
+const HTML_ESCAPES: Record<string, string> = {
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#39;'
+};
+
+/** Escapes user-provided text before it is interpolated into HTML (see audit 28/10). */
+export function escapeHtml(value: unknown): string {
+  if (value === undefined || value === null) {
+    return '';
+  }
+  return String(value).replace(/[&<>"']/g, (ch) => HTML_ESCAPES[ch] ?? ch);
+}
+
+
 export class ConfigController {
   private config = ConfigService.loadConfig();
 
@@ -468,13 +485,13 @@ export class ConfigController {
 
       <div class="form-group" id="rdGroup" style="display:${provider === 'torbox' ? 'none' : 'block'}">
         <label for="rdToken">TOKEN REAL-DEBRID</label>
-        <input type="text" id="rdToken" placeholder="Cole seu token aqui" value="${config?.realdebridToken || ''}">
+        <input type="text" id="rdToken" placeholder="Cole seu token aqui" value="${escapeHtml(config?.realdebridToken)}">
         <div class="helper"><a href="https://real-debrid.com/apitoken" target="_blank" style="color:var(--accent)">Obter token &rarr;</a></div>
       </div>
 
       <div class="form-group" id="tbGroup" style="display:${provider === 'torbox' ? 'block' : 'none'}">
         <label for="tbToken">TOKEN TORBOX</label>
-        <input type="text" id="tbToken" placeholder="Cole seu token aqui" value="${config?.torboxToken || ''}">
+        <input type="text" id="tbToken" placeholder="Cole seu token aqui" value="${escapeHtml(config?.torboxToken)}">
         <div class="helper"><a href="https://torbox.app/settings" target="_blank" style="color:var(--accent)">Obter token &rarr;</a></div>
       </div>
 

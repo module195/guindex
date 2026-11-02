@@ -689,6 +689,43 @@ export class StreamService {
     }
   }
 
+  /**
+   * The ctx query param is user-controlled. Keep only well-typed fields so that
+   * season/episode values can never reach a RegExp as arbitrary text (ReDoS).
+   */
+  static sanitizeStreamContext(raw: unknown): StreamContext | undefined {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+      return undefined;
+    }
+    const input = raw as Record<string, unknown>;
+    const toInt = (value: unknown): number | undefined =>
+      typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 100000 ? value : undefined;
+    const toText = (value: unknown): string | undefined =>
+      typeof value === 'string' ? value.slice(0, 300) : undefined;
+
+    const context: StreamContext = {};
+    const type = toText(input.type);
+    if (type !== undefined) context.type = type;
+    const season = toInt(input.season);
+    if (season !== undefined) context.season = season;
+    const episode = toInt(input.episode);
+    if (episode !== undefined) context.episode = episode;
+    const year = toInt(input.year);
+    if (year !== undefined) context.year = year;
+    const title = toText(input.title);
+    if (title !== undefined) context.title = title;
+    const episodeTitle = toText(input.episodeTitle);
+    if (episodeTitle !== undefined) context.episodeTitle = episodeTitle;
+    if (Array.isArray(input.episodeList)) {
+      const list = input.episodeList
+        .slice(0, 500)
+        .map(toInt)
+        .filter((value): value is number => value !== undefined);
+      if (list.length > 0) context.episodeList = list;
+    }
+    return context;
+  }
+
   static decodeStreamContext(encoded?: string): StreamContext | undefined {
     if (!encoded) {
       return undefined;
@@ -706,8 +743,7 @@ export class StreamService {
         return undefined;
       }
 
-      const context = JSON.parse(json) as StreamContext;
-      return context;
+      return StreamService.sanitizeStreamContext(JSON.parse(json));
     } catch {
       return undefined;
     }
