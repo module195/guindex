@@ -324,6 +324,22 @@ test('fluxo: Tropa de Elite sai só com 🇧🇷 e filename = dn + PT-BR', () =>
   assert.equal(meta.behaviorHints.folderName, undefined);
 });
 
+test('seeders: 0 seed + 0 leech (scrape falhou) não vira seeders: 0 para o AIOStreams', () => {
+  const unknown = mapTorrent({ ...tropaDeElite, seed_count: 0, leech_count: 0 });
+  const meta = StreamService.createStreamMetadata(unknown, 'https://guindex.example/resolve/abc', { viaDebrid: true });
+  assert.equal(unknown.seeders, undefined);
+  assert.equal(meta.seeders, undefined);
+  assert.equal(meta.behaviorHints.seeders, undefined);
+
+  // 0 seeders com leechers é um número real e segue
+  const leeching = mapTorrent({ ...tropaDeElite, seed_count: 0, leech_count: 3 });
+  assert.equal(leeching.seeders, 0);
+  // 0 seeders sem leech_count (outra fonte) também segue
+  const noLeechField = { ...tropaDeElite, seed_count: 0 };
+  delete noLeechField.leech_count;
+  assert.equal(mapTorrent(noLeechField).seeders, 0);
+});
+
 test('B2: pack sem files[] não ganha fileIdx chutado', () => {
   const pack = {
     title: 'Show S01 1080p WEB-DL Dual Audio',
