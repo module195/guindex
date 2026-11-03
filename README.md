@@ -392,7 +392,7 @@ npm start
 |----------|--------|-----------|
 | `TORRENT_INDEXER_DISABLED_INDEXERS` | — | Lista CSV de indexers desativados |
 | `TORRENT_INDEXER_FAILURE_THRESHOLD` | `2` | Falhas consecutivas antes de cooldown |
-| `TORRENT_INDEXER_FAILURE_COOLDOWN_MS` | `900000` | Tempo de cooldown apos falhas (15min) |
+| `TORRENT_INDEXER_FAILURE_COOLDOWN_MS` | `300000` | Tempo de cooldown apos falhas (5min, igual ao do torrent-indexer). Uma resposta do multi conta no maximo uma falha por indexer |
 
 ### 🌍 Fila Global de Raspagem (Global Queue)
 
@@ -468,7 +468,7 @@ TORRENT_INDEXER_HYBRID_MIN_INDEXERS=2
 # Estabilidade e Resiliência
 TORRENT_INDEXER_DISABLED_INDEXERS=
 TORRENT_INDEXER_FAILURE_THRESHOLD=2
-TORRENT_INDEXER_FAILURE_COOLDOWN_MS=900000
+TORRENT_INDEXER_FAILURE_COOLDOWN_MS=300000
 
 # Fila Global de Fundo
 TORRENT_INDEXER_GLOBAL_QUEUE_CONCURRENCY=1
