@@ -431,7 +431,18 @@ npm start
 | `GUINDEX_TORBOX_LIBRARY_WAIT_MS` | `750` | Espera maxima pela lista da conta TorBox depois que a busca termina (sempre dentro do orcamento) |
 | `GUINDEX_TORBOX_LIBRARY_CATALOG` | `true` | Catalogo "Minha TorBox" no manifest `/torbox/TOKEN/` (catalog, meta e stream dos itens da conta) |
 | `ALLOW_ENV_DEBRID_TOKEN` | `false` | Com `true`, pedidos sem token na URL usam `TORBOX_TOKEN`/`REALDEBRID_TOKEN` do env. So para instancia privada: os links `/resolve` levam esse token, entao qualquer um que acesse `/stream` passa a usar a conta do dono |
-| `TORBOX_TOKEN` / `REALDEBRID_TOKEN` | — | Token do dono, lido so com `ALLOW_ENV_DEBRID_TOKEN=true` |
+| `TORBOX_TOKEN` / `REALDEBRID_TOKEN` | — | Token do dono. Lido com `ALLOW_ENV_DEBRID_TOKEN=true` ou no modo privado (`ADDON_ACCESS_KEY`) |
+| `ADDON_ACCESS_KEY` | — | Liga o modo privado (veja abaixo). Use 32+ caracteres aleatorios: `openssl rand -hex 24` |
+
+### Modo privado (instancia so sua)
+
+Com `ADDON_ACCESS_KEY` definido, a instancia so atende pedidos que levam a chave:
+
+- URL de instalacao: `https://SEU-HOST/torbox/<ADDON_ACCESS_KEY>/manifest.json` (ou `/realdebrid/...`).
+- O token real fica so no env (`TORBOX_TOKEN` / `REALDEBRID_TOKEN`) e e trocado na hora de chamar a API do debrid. Os links de stream e `/resolve` levam a chave, nunca o token.
+- Sem a chave, tudo responde 404: `/`, `/configure`, `/manifest.json`, `/stream`, `/resolve` e qualquer token de outra pessoa. So `/health`, `/placeholder/downloading.mp4` e os arquivos da pagina ficam abertos.
+- Pagina de configuracao: `https://SEU-HOST/configure?key=<ADDON_ACCESS_KEY>`, ja com a chave no campo do token.
+- Vazou um link? Troque `ADDON_ACCESS_KEY` e reinstale; o token do debrid continua secreto. `ALLOW_ENV_DEBRID_TOKEN` nao e necessario nesse modo.
 
 ### Perfil recomendado para VPS
 
