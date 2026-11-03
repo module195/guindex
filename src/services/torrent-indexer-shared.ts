@@ -121,6 +121,8 @@ export interface SearchCacheEntry {
 export interface LocalizedTitleCacheEntry {
   ts: number;
   titles: string[];
+  /** Consulta falhou (timeout, rede, HTTP fora de 2xx): vale o TTL curto. */
+  failed?: boolean;
 }
 
 export interface IndexerFailureState {

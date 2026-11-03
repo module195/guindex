@@ -407,6 +407,7 @@ npm start
 | `TORRENT_INDEXER_SEARCH_CACHE_TTL_MS` | `120000` | TTL do cache de busca em memoria (2min) |
 | `TORRENT_INDEXER_INDEXERS_CACHE_TTL_MS` | `120000` | TTL do cache do `/sources?v=2` (indexers, capacidades e saude; 2min) |
 | `TORRENT_INDEXER_LOCALIZED_TITLE_CACHE_TTL_MS` | `604800000` | TTL do cache TMDB (7 dias) |
+| `TORRENT_INDEXER_LOCALIZED_TITLE_FAILURE_TTL_MS` | `300000` | TTL quando o TMDB falha (timeout, rede, HTTP fora de 2xx): 5 min |
 
 #### TMDB (resolucao de titulos PT-BR)
 
