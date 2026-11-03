@@ -31,6 +31,7 @@ EXPOSE 7000
 
 # Healthcheck usa a própria instância local
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:7000/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) }).on('error', () => process.exit(1))"
+  CMD node -e "require('http').get('http://localhost:' + (process.env.PORT || 7000) + '/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) }).on('error', () => process.exit(1))"
 
-CMD ["npm", "start"]
+# node direto (sem npm) para o SIGTERM do docker stop chegar ao processo
+CMD ["node", "dist/server.js"]
