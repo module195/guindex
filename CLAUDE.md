@@ -4,14 +4,14 @@ Addon Stremio em TypeScript (ESM, Fastify 5, Node ≥ 20.18) para conteúdo bras
 
 ## Comandos
 
-- Instalar: `npm install` (não há `package-lock.json` ainda)
+- Instalar: `npm ci` (o `package-lock.json` está no repo; use `npm install` só para mudar dependências)
 - Dev: `npm run dev` · Build: `npm run build` · Start: `npm start` (porta 7000)
 - Checagens do CI: `npm run typecheck && npm run lint && npm test`
 - Testes focados: `npm run test:aiostreams`, `npm run test:indexer` (testes em `tests/*.test.mjs`, rodam sobre `dist/`)
 
 ## Mapa do código
 
-- `src/server.ts`, `src/routes/routes.ts`: Fastify + `stremio-addon-sdk`; rotas `/manifest.json`, `/stream/:type/:id.json`, `/configure`, `/health`, rotas com token `/<debrid>/<token>/...` e `/resolve`.
+- `src/server.ts`, `src/routes/routes.ts`: Fastify (rotas do protocolo Stremio feitas à mão); rotas `/manifest.json`, `/stream/:type/:id.json`, `/configure`, `/health`, rotas com token `/<debrid>/<token>/...` e `/resolve`.
 - `src/config/sources.ts`: fontes; `TORRENT_INDEXER_URL` (padrão `http://127.0.0.1:8090`).
 - `src/services/torrent-indexer-provider.ts` (~4.200 linhas): busca em 3 fases (Meilisearch `/search` + `/indexers/multi` em paralelo, indexers rápidos no fim), dentro de `TORRENT_INDEXER_REQUEST_BUDGET_MS` (padrão 8000). `torrent-indexer-shared.ts`: constantes e env.
 - `src/services/torrent-parser.ts`: regex de releases BR (temporada, episódio, áudio, qualidade).

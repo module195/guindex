@@ -48,7 +48,6 @@ tests/stremio-real-flow.test.mjs
 test-artifacts*
 
 .vercel
-package-lock.json
 .kiro
 # Claude Code: preferências locais não vão para o repo
 .claude/settings.local.json

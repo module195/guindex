@@ -5,18 +5,13 @@
 
 import Fastify from 'fastify';
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import pino from 'pino';
 import path from 'path';
-import stremioAddonSdk from 'stremio-addon-sdk';
 import { ConfigController } from '../controllers/config-controller.js';
 import { StreamController } from '../controllers/stream-controller.js';
 import { ConfigService } from '../services/config-service.js';
 import { RealDebridBlockedError } from '../services/realdebrid-service.js';
 import { StreamService } from '../services/stream-service.js';
 import { publicClientIp } from '../services/client-ip.js';
-import type { StreamRequest } from '../models/stream-model.js';
-
-const { addonBuilder } = stremioAddonSdk;
 
 export function setupRoutes() {
   const config = ConfigService.loadConfig();
@@ -40,12 +35,6 @@ export function setupRoutes() {
   // Initialize controllers
   const configController = new ConfigController();
   const streamController = new StreamController();
-
-  // Initialize addon builder
-  const builder = new addonBuilder(configController.createAddonManifest() as any);
-  builder.defineStreamHandler(async (args: StreamRequest) => {
-    return streamController.handleStreamRequest(args);
-  });
 
   // O manifest não leva token e só muda com um deploy. Cache longo e stale-if-error
   // evitam que uma falha momentânea tire o addon do agregador (o AIOStreams guarda
