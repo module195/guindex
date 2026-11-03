@@ -12,6 +12,7 @@ import { ConfigService } from '../services/config-service.js';
 import { RealDebridBlockedError } from '../services/realdebrid-service.js';
 import { StreamService } from '../services/stream-service.js';
 import { publicClientIp } from '../services/client-ip.js';
+import { addonAccessKey, isPrivateMode, requestCarriesAccessKey } from '../services/access-key.js';
 import { TorboxService } from '../services/torbox-service.js';
 import {
   LIBRARY_CATALOG_ENABLED,
@@ -42,6 +43,18 @@ export function setupRoutes() {
   fastify.register(import('@fastify/static'), {
     root: path.resolve('public')
   });
+
+  // Modo privado (ADDON_ACCESS_KEY): sem a chave no caminho ou em ?key=, a
+  // instância responde 404 a tudo, inclusive /configure e /manifest.json.
+  // 404 em vez de 401 para não confirmar que existe um addon aqui.
+  if (isPrivateMode()) {
+    console.info('[GuIndex] 🔒 Modo privado ativo: pedidos sem ADDON_ACCESS_KEY recebem 404');
+    fastify.addHook('onRequest', async (req, reply) => {
+      if (req.method === 'OPTIONS' || requestCarriesAccessKey(req.url)) return;
+      reply.status(404).header('cache-control', 'no-store').send({ error: 'Not Found' });
+      return reply;
+    });
+  }
 
   // Initialize controllers
   const configController = new ConfigController();
@@ -148,12 +161,25 @@ export function setupRoutes() {
     }
   });
 
+  // No modo privado a página entra com ?key=<CHAVE> e já preenche a chave no
+  // campo do token: a URL de instalação sai com a chave, não com o token debrid.
+  const privateConfigPrefill = () => {
+    const key = addonAccessKey();
+    if (!key) return undefined;
+    const provider = process.env.TORBOX_TOKEN?.trim() || !process.env.REALDEBRID_TOKEN?.trim() ? 'torbox' : 'realdebrid';
+    return provider === 'torbox'
+      ? { debridProvider: provider, torboxToken: key }
+      : { debridProvider: provider, realdebridToken: key };
+  };
+
   fastify.get('/configure', async (req, reply) => {
     const query = req.query as any;
+    const prefill = privateConfigPrefill();
     const selection = StreamService.resolveDebridSelection({
-      query,
-      headers: req.headers
+      query: prefill ?? query,
+      headers: prefill ? {} : req.headers
     });
+    reply.header('cache-control', 'no-store');
     
     reply
       .type('text/html')
@@ -171,9 +197,11 @@ export function setupRoutes() {
   });
 
   fastify.get('/', async (req, reply) => {
+    const prefill = privateConfigPrefill();
     reply
+      .header('cache-control', 'no-store')
       .type('text/html')
-      .send(configController.generateConfigHTML(undefined, false, ConfigService.requestOrigin(req.headers, req.protocol)));
+      .send(configController.generateConfigHTML(prefill, !!prefill, ConfigService.requestOrigin(req.headers, req.protocol)));
   });
 
   // ✅ Caso sem token

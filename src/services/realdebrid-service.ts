@@ -18,6 +18,7 @@ import { timeStep, timedSleep } from './playback-timing.js';
 import type { TorrentInfo, MagnetResponse, UnrestrictResponse } from '../models/realdebrid-model.js';
 import type { StreamContext } from '../models/source-model.js';
 import { BoundedMap } from '../utils/bounded-map.js';
+import { debridApiToken } from './access-key.js';
 import { selectBestFile } from './file-selection.js';
 
 interface AccountTorrent {
@@ -138,7 +139,11 @@ export class RealDebridService {
     this.blockedFiles.set(this.blockedKey(hash, context), Date.now() + this.BLOCKED_TTL_MS);
   }
 
-  constructor(private token: string) {}
+  private readonly token: string;
+
+  constructor(token: string) {
+    this.token = debridApiToken(token, 'realdebrid');
+  }
 
   // ── Public API ──────────────────────────────────────────────────────────
 
@@ -306,7 +311,7 @@ export class RealDebridService {
       const response = await request(
         `${API_BASE}/torrents?limit=${this.ACCOUNT_TORRENTS_LIMIT}`,
         {
-          headers: { Authorization: `Bearer ${token}` },
+          headers: { Authorization: `Bearer ${debridApiToken(token, 'realdebrid')}` },
           headersTimeout: REQUEST_TIMEOUT_MS,
           bodyTimeout: REQUEST_TIMEOUT_MS
         }

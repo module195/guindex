@@ -5,6 +5,7 @@
 
 import { getGlobalDispatcher, interceptors, request, type Dispatcher } from 'undici';
 import { timeStep } from './playback-timing.js';
+import { debridApiToken } from './access-key.js';
 
 /**
  * undici 7 tirou `maxRedirections` do request(); o redirect agora é um interceptor.
@@ -81,7 +82,7 @@ export class TorboxClient {
   private readonly requestTimeout = 15000; // ms
 
   constructor(options: TorboxClientOptions) {
-    this.token = options.token;
+    this.token = debridApiToken(options.token, 'torbox');
     this.baseUrl = (options.baseUrl || 'https://api.torbox.app').replace(/\/$/, '');
     this.userAgent = options.userAgent || 'guindex-rd';
   }
