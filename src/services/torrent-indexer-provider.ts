@@ -50,6 +50,7 @@ import { BoundedMap } from '../utils/bounded-map.js';
 import { selectBestFile } from './file-selection.js';
 import { TorboxService } from './torbox-service.js';
 import type { TorboxTorrent } from './torbox-client.js';
+import { LIBRARY_INDEXER_LABEL } from './torbox-library.js';
 
 export { logReq } from './torrent-indexer-shared.js';
 const BACKGROUND_WARM_DELAY_MS = 2000;
@@ -765,6 +766,8 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     for (const stream of added) {
       stream.cached = true;
       stream.inLibrary = true;
+      // Só veio da conta: no AIOStreams o indexer aparece como o Library dele
+      stream.indexerLabel = LIBRARY_INDEXER_LABEL;
     }
     if (marked > 0 || added.length > 0) {
       logReq(
