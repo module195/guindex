@@ -12,6 +12,17 @@ import { ConfigService } from '../services/config-service.js';
 import { RealDebridBlockedError } from '../services/realdebrid-service.js';
 import { StreamService } from '../services/stream-service.js';
 import { publicClientIp } from '../services/client-ip.js';
+import { TorboxService } from '../services/torbox-service.js';
+import {
+  LIBRARY_CATALOG_ENABLED,
+  LIBRARY_CATALOG_ID,
+  LIBRARY_ID_PREFIX,
+  LIBRARY_TYPE,
+  fetchLibraryCatalog,
+  fetchLibraryMeta,
+  fetchLibraryStreams,
+  parseLibraryExtras
+} from '../services/torbox-library.js';
 
 export function setupRoutes() {
   const config = ConfigService.loadConfig();
@@ -40,10 +51,10 @@ export function setupRoutes() {
   // evitam que uma falha momentânea tire o addon do agregador (o AIOStreams guarda
   // falha de manifest por 60 s).
   const MANIFEST_CACHE_CONTROL = 'public, max-age=3600, stale-while-revalidate=86400, stale-if-error=604800';
-  const sendManifest = (reply: FastifyReply, isConfigured: boolean) => {
+  const sendManifest = (reply: FastifyReply, isConfigured: boolean, withLibrary = false) => {
     reply
       .header('cache-control', MANIFEST_CACHE_CONTROL)
-      .send(configController.createAddonManifest(isConfigured));
+      .send(configController.createAddonManifest(isConfigured, withLibrary));
   };
 
   /**
@@ -84,7 +95,57 @@ export function setupRoutes() {
       routeParams: { token: token }
     });
 
-    sendManifest(reply, !!debridSelection.token);
+    // Só no formato /torbox/TOKEN/: o Stremio pede catalog/meta relativos a esse caminho
+    sendManifest(reply, !!debridSelection.token, debridSelection.provider === 'torbox' && !!debridSelection.torboxToken);
+  });
+
+  // ---------- Catálogo "Minha TorBox" (biblioteca da conta) ----------
+  const libraryToken = (provider: string, token: string): string | undefined => {
+    const selection = StreamService.resolveDebridSelection({
+      query: { debridProvider: provider, token },
+      headers: {},
+      routeParams: { token }
+    });
+    return selection.provider === 'torbox' && LIBRARY_CATALOG_ENABLED ? selection.torboxToken : undefined;
+  };
+  const LIBRARY_CACHE_CONTROL = 'private, max-age=60';
+
+  const handleLibraryCatalog = async (req: FastifyRequest, reply: FastifyReply) => {
+    const { provider = '', token = '', type, id, extra } = req.params as Record<string, string | undefined>;
+    const tbToken = libraryToken(provider, token);
+    if (!tbToken || type !== LIBRARY_TYPE || id !== LIBRARY_CATALOG_ID) {
+      reply.send({ metas: [] });
+      return;
+    }
+    try {
+      const metas = await fetchLibraryCatalog(tbToken, parseLibraryExtras(extra));
+      reply.header('cache-control', LIBRARY_CACHE_CONTROL).send({ metas });
+    } catch (error) {
+      console.error(`[GuIndex] ❌ Catálogo Minha TorBox: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      reply.send({ metas: [] });
+    }
+  };
+  fastify.get('/:provider/:token/catalog/:type/:id.json', handleLibraryCatalog);
+  fastify.get('/:provider/:token/catalog/:type/:id/:extra.json', handleLibraryCatalog);
+
+  fastify.get('/:provider/:token/meta/:type/:id.json', async (req, reply) => {
+    const { provider = '', token = '', id = '' } = req.params as Record<string, string | undefined>;
+    const tbToken = libraryToken(provider, token);
+    if (!tbToken || !id.startsWith(LIBRARY_ID_PREFIX)) {
+      reply.status(404).send({ meta: null });
+      return;
+    }
+    try {
+      const meta = await fetchLibraryMeta(tbToken, id);
+      if (!meta) {
+        reply.status(404).send({ meta: null });
+        return;
+      }
+      reply.header('cache-control', 'private, no-store').send({ meta });
+    } catch (error) {
+      console.error(`[GuIndex] ❌ Meta Minha TorBox (${id}): ${error instanceof Error ? error.message : 'Unknown error'}`);
+      reply.status(404).send({ meta: null });
+    }
   });
 
   fastify.get('/configure', async (req, reply) => {
@@ -197,6 +258,25 @@ export function setupRoutes() {
       routeParams: { token: token }
     });
 
+    if (typeof id === 'string' && id.startsWith(LIBRARY_ID_PREFIX)) {
+      const tbToken = libraryToken(provider, token);
+      if (!tbToken) {
+        reply.send({ streams: [] });
+        return;
+      }
+      try {
+        const base = config.baseUrlIsFallback
+          ? ConfigService.requestOrigin(req.headers, req.protocol) ?? config.baseUrl
+          : config.baseUrl;
+        const streams = await fetchLibraryStreams(tbToken, id, base);
+        reply.header('cache-control', 'private, no-store').send({ streams });
+      } catch (error) {
+        console.error(`[GuIndex] ❌ Stream Minha TorBox (${id}): ${error instanceof Error ? error.message : 'Unknown error'}`);
+        reply.send({ streams: [] });
+      }
+      return;
+    }
+
     try {
       const extra: { 
         realdebridToken?: string; 
@@ -301,6 +381,29 @@ export function setupRoutes() {
     }
   };
 
+  /** Play de um arquivo do catálogo "Minha TorBox": link direto do torrent da conta. */
+  const handleLibraryResolve = async (
+    reply: FastifyReply,
+    token: string,
+    provider: string | undefined,
+    query: Record<string, unknown>,
+    userIp?: string
+  ) => {
+    const tbToken = provider ? libraryToken(provider, token) : undefined;
+    const torrentId = Number.parseInt(String(query.torrentId ?? ''), 10);
+    const fileIdRaw = query.fileId === undefined ? undefined : Number.parseInt(String(query.fileId), 10);
+    if (!tbToken || !Number.isSafeInteger(torrentId) || torrentId < 0 || (fileIdRaw !== undefined && !Number.isSafeInteger(fileIdRaw))) {
+      reply.status(400).send({ error: 'torrentId inválido ou provedor sem biblioteca' });
+      return;
+    }
+    try {
+      reply.redirect(await TorboxService.accountFileLink(tbToken, torrentId, fileIdRaw, userIp));
+    } catch (error) {
+      console.error(`[GuIndex] ❌ Play Minha TorBox (torrent ${torrentId}): ${error instanceof Error ? error.message : 'Unknown error'}`);
+      reply.status(502).send({ error: 'Falha ao pedir o link à TorBox' });
+    }
+  };
+
   type ResolveRouteValues = {
     token?: string | undefined;
     magnet?: string | undefined;
@@ -332,6 +435,12 @@ export function setupRoutes() {
 
         if (!token) {
           reply.status(400).send({ error: 'Debrid token is required' });
+          return;
+        }
+
+        if (linkType === 'library') {
+          await handleLibraryResolve(reply, token, provider, req.query as Record<string, unknown>, userIp);
+          console.info(`[GuIndex] 🔗 Resolve (${provider}/library) finalizado em ${Date.now() - started}ms`);
           return;
         }
 

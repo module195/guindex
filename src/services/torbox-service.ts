@@ -393,6 +393,21 @@ export class TorboxService {
     return items.filter(isLibraryReady);
   }
 
+  /** Esquece a lista da conta do token: o próximo pedido busca de novo (ação "Atualizar"). */
+  static forgetAccount(token: string): void {
+    this.accountTorrents.delete(token);
+  }
+
+  /** Um torrent da conta com a lista de arquivos, sem o cache do TorBox. */
+  static accountTorrent(token: string, torrentId: number): Promise<TorboxTorrent> {
+    return new TorboxClient({ token }).getTorrent(torrentId);
+  }
+
+  /** Link direto de um arquivo de um torrent que já está na conta (sem createtorrent). */
+  static accountFileLink(token: string, torrentId: number, fileId?: number, userIp?: string): Promise<string> {
+    return new TorboxClient({ token }).requestDownloadLink({ torrentId, fileId, userIp });
+  }
+
   /** Lista da conta por token, com cache curto e uma consulta por vez. */
   private static loadAccount(token: string): Promise<AccountSnapshot> {
     const cached = this.accountTorrents.get(token);
