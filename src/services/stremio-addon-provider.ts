@@ -64,7 +64,7 @@ const parsePositiveInt = (value: string | undefined, fallback: number): number =
 
 // Padrão: o mesmo prazo da busca do GuIndex (orçamento do pedido menos a margem
 // do debrid), para um addon lento não segurar a resposta inteira.
-const ADDON_TIMEOUT_MS = parsePositiveInt(
+export const ADDON_TIMEOUT_MS = parsePositiveInt(
   process.env.STREMIO_ADDON_TIMEOUT_MS,
   Math.max(1000, REQUEST_BUDGET_MS - DEBRID_MARGIN_MS),
 );

@@ -122,6 +122,9 @@ const globalQueue = new GlobalIndexerQueue();
 /** Biblioteca TorBox no /stream (itens da conta casados com o título). */
 const LIBRARY_ENABLED = parseBoolean(readEnv('GUINDEX_TORBOX_LIBRARY'), true);
 /** Espera máxima pela lista da conta depois que a busca termina */
+// Folga além do PHASE3_MIN_MS ao cortar a espera do multi com o cache vazio,
+// para a Fase 3 não ficar de fora por poucos ms.
+const PHASE3_RESERVE_SLACK_MS = 100;
 const LIBRARY_WAIT_MS = parseNonNegativeInt(readEnv('GUINDEX_TORBOX_LIBRARY_WAIT_MS'), 750);
 /** Teto de streams novos vindos só da conta, por pedido */
 const MAX_LIBRARY_STREAMS = 20;
@@ -263,11 +266,16 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     const forceFresh = options?.forceFresh === true;
     const parsed = this.parser.parseId(id);
     const metaLookupId = parsed.imdbId ?? parsed.query ?? (id || '').split(':')[0] ?? id;
+    // As consultas seguem abertas depois do META_BUDGET: se os títulos não
+    // chegarem a tempo, a busca sai só por IMDb e o filtro de título é refeito
+    // quando eles chegarem, dentro do prazo (lateTitles, no fim da busca).
+    const metaPromise = this.fetchCinemetaMeta(type, metaLookupId, forceFresh).catch(() => undefined);
+    const localizedPromise = parsed.imdbId
+      ? this.fetchLocalizedTitleCandidates(parsed.imdbId, forceFresh).catch(() => [] as string[])
+      : Promise.resolve<string[]>([]);
     const [meta, localizedTitlesRaw] = await Promise.all([
-      this.awaitWithin(this.fetchCinemetaMeta(type, metaLookupId, forceFresh), META_BUDGET_MS, undefined),
-      parsed.imdbId
-        ? this.awaitWithin(this.fetchLocalizedTitleCandidates(parsed.imdbId, forceFresh), META_BUDGET_MS, [])
-        : Promise.resolve<string[]>([]),
+      this.awaitWithin(metaPromise, META_BUDGET_MS, undefined),
+      this.awaitWithin(localizedPromise, META_BUDGET_MS, [] as string[]),
     ]);
     let displayTitles = this.parser.collectMetaTitles(meta);
     
@@ -385,6 +393,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
       Math.min(CACHE_TIMEOUT_MS, Math.max(500, remainingMs())),
       type.toLowerCase() === 'movie' ? undefined : { season: parsed.season, episode: parsed.episode },
     );
+    const fetchedTorrents: TorrentLike[] = [...cacheTorrents];
     const cacheSufficient = this.hasSufficientResults(cacheTorrents, fallbackTitle, context);
     const streams = this.collectStreamsFromTorrents(cacheTorrents, fallbackTitle, context, seen, sourceCounts, 150);
     const cacheHas4K = streams.some((stream) => stream.quality === '4K');
@@ -398,10 +407,15 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     //   servidor e alimenta o cache. Cache fraco: espera o multi até o prazo.
     // ═══════════════════════════════════════════════════════
     const graceMs = cacheHas4K ? MULTI_GRACE_MS : MULTI_GRACE_NO_4K_MS;
+    // Cache vazio: a espera pelo multi para antes do fim e deixa o tempo da
+    // Fase 3, que roda junto com o multi ainda aberto. Esperar o multi até o
+    // prazo deixava só a folga dele (~1 s), menos que o PHASE3_MIN_MS.
     const multiWaitMs = cacheSufficient && !forceFresh
       ? Math.min(graceMs, Math.max(0, remainingMs()))
-      : Math.max(0, remainingMs());
-    const multiResults = await this.awaitWithin(multiPromise, multiWaitMs, undefined);
+      : streams.length === 0
+        ? Math.max(0, remainingMs() - PHASE3_MIN_MS - PHASE3_RESERVE_SLACK_MS)
+        : Math.max(0, remainingMs());
+    let multiResults = await this.awaitWithin(multiPromise, multiWaitMs, undefined);
     logReq(
       context,
       `📦 [Fase 1] cache: ${cacheTorrents.length} torrents (${cacheSufficient ? 'suficiente' : 'fraco'}` +
@@ -409,10 +423,11 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
         `[Fase 2] multi: ${multiResults === undefined ? 'sem resposta no prazo' : `${multiResults.length} torrents`}`,
     );
 
-    if (multiResults) {
+    const addMultiResults = (results: TorrentLike[]) => {
+      fetchedTorrents.push(...results);
       streams.push(
         ...this.collectStreamsFromTorrents(
-          multiResults,
+          results,
           fallbackTitle,
           context,
           seen,
@@ -420,9 +435,8 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
           Math.max(0, 150 - streams.length),
         ),
       );
-    } else {
-      this.watchLateMultiResults(multiPromise, type, id, fallbackTitle, context, seen, cacheTorrents);
-    }
+    };
+    if (multiResults) addMultiResults(multiResults);
 
     // ═══════════════════════════════════════════════════════
     // FASE 3 — Indexers com melhor desempenho (como no original)
@@ -437,9 +451,58 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
         : extraQueries
       ).slice(0, PHASE3_MAX_QUERIES);
       if (phase3Queries.length > 0) {
-        const phase3Results = await this.fetchFastestIndexersSearch(phase3Queries, remainingMs(), context);
+        const [phase3Results, lateMulti] = await Promise.all([
+          this.fetchFastestIndexersSearch(phase3Queries, remainingMs(), context),
+          multiResults === undefined
+            ? this.awaitWithin(multiPromise, Math.max(0, remainingMs()), undefined)
+            : Promise.resolve(undefined),
+        ]);
+        if (lateMulti) {
+          multiResults = lateMulti;
+          addMultiResults(lateMulti);
+        }
+        fetchedTorrents.push(...phase3Results);
         streams.push(
           ...this.collectStreamsFromTorrents(phase3Results, fallbackTitle, context, seen, sourceCounts, 150),
+        );
+      }
+    }
+    if (multiResults === undefined) {
+      this.watchLateMultiResults(multiPromise, type, id, fallbackTitle, context, seen, cacheTorrents);
+    }
+
+    // Títulos atrasados: a busca saiu sem eles (só por IMDb) e o filtro
+    // descartou todo torrent sem IMDb. Chegando ainda no prazo, o filtro é
+    // refeito sobre o que já voltou, sem nova consulta.
+    if (parsed.imdbId && displayTitles.length === 0 && remainingMs() > 0) {
+      const late = await this.awaitWithin(
+        Promise.all([metaPromise, localizedPromise]),
+        // Com streams já na mão (torrents com IMDb), espera só mais um META_BUDGET:
+        // o Cinemeta fora do ar não pode empurrar toda resposta até o prazo.
+        streams.length === 0 ? Math.max(0, remainingMs()) : Math.min(META_BUDGET_MS, Math.max(0, remainingMs())),
+        undefined,
+      );
+      const lateTitles = late
+        ? [...new Set([...(late[1] ?? []), ...this.parser.collectMetaTitles(late[0])])].filter(Boolean)
+        : [];
+      if (late && lateTitles.length > 0) {
+        context.targetTitles = lateTitles;
+        context.releaseYear = this.parser.extractReleaseYear(late[0]);
+        const before = streams.length;
+        streams.push(
+          ...this.collectStreamsFromTorrents(
+            fetchedTorrents,
+            fallbackTitle,
+            context,
+            seen,
+            sourceCounts,
+            Math.max(0, 150 - streams.length),
+          ),
+        );
+        logReq(
+          context,
+          `🕒 Títulos chegaram depois do META_BUDGET (${Date.now() - startedAt}ms); ` +
+            `filtro refeito: +${streams.length - before} streams`,
         );
       }
     }

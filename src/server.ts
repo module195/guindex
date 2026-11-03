@@ -5,9 +5,11 @@
 import 'dotenv/config';
 import { setupRoutes } from './routes/routes.js';
 import { ConfigService } from './services/config-service.js';
+import { warnInvalidTimingConfig } from './services/timing-config.js';
 
 async function startServer() {
   const config = ConfigService.loadConfig();
+  warnInvalidTimingConfig();
   const fastify = setupRoutes();
 
   try {
