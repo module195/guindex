@@ -4,8 +4,6 @@
 
 import { request } from 'undici';
 import { BaseSourceProvider, type SourceFetchOptions } from './base-source-provider.js';
-import { RealDebridService } from './realdebrid-service.js';
-import { TorboxService } from './torbox-service.js';
 import { prefetchDebridAvailability } from './debrid-prefetch.js';
 import type { SourceStream, StreamContext } from '../models/source-model.js';
 import { TorrentParser } from './torrent-parser.js';
@@ -542,49 +540,6 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     }
   }
 
-  async getSearchStreams(
-    query: string,
-    options?: SourceFetchOptions
-  ): Promise<SourceStream[]> {
-    const forceFresh = options?.forceFresh === true;
-    const sanitized = this.parser.sanitizeQuery(query);
-    if (!sanitized) return [];
-
-    const context: MatchContext = {
-      parsed: { query: sanitized },
-      type: 'movie',
-      targetTitles: [sanitized],
-      reqId: 'SEARCH',
-      logName: sanitized
-    };
-
-    logReq(context, `🔍 Iniciando busca genérica para: '${sanitized}'`);
-    
-    const queries = [sanitized];
-    const rawTorrents = await this.fetchMultiSearchResults(queries, false, context, forceFresh);
-
-    const seen = new Set<string>();
-    const streams: SourceStream[] = [];
-
-    for (const torrent of rawTorrents) {
-      const stream = this.mapTorrentToStream(torrent, sanitized, context);
-      if (!stream) continue;
-
-      const dedupeKey = this.parser.getDedupeKey(stream);
-      if (dedupeKey && seen.has(dedupeKey)) continue;
-
-      streams.push(stream);
-      if (dedupeKey) seen.add(dedupeKey);
-      if (streams.length >= 100) break;
-    }
-
-    if (streams.length > 0) {
-      await this.decorateWithDebrid(streams, options);
-    }
-
-    return streams;
-  }
-
   private collectStreamsFromTorrents(
     torrents: TorrentLike[],
     fallbackTitle: string,
@@ -623,97 +578,6 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     return streams;
   }
 
-  private async decorateWithDebrid(
-    streams: SourceStream[],
-    options?: SourceFetchOptions
-  ): Promise<void> {
-    const hashToStreams = new Map<string, SourceStream[]>();
-
-    for (const stream of streams) {
-      const hash = this.parser.getStreamInfoHash(stream);
-      if (!hash) {
-        stream.cached = false;
-        continue;
-      }
-
-      const normalized = hash.toLowerCase();
-      if (!hashToStreams.has(normalized)) {
-        hashToStreams.set(normalized, []);
-      }
-      hashToStreams.get(normalized)!.push(stream);
-    }
-
-    if (hashToStreams.size === 0) {
-      return;
-    }
-
-    let cachedHashes = new Set<string>();
-    try {
-      cachedHashes = await this.fetchDebridCachedHashes([...hashToStreams.keys()], options);
-    } catch {
-      cachedHashes = new Set<string>();
-    }
-
-    const badgeProvider =
-      options?.debridProvider ?? (options?.torboxToken && !options?.realdebridToken ? 'torbox' : 'realdebrid');
-
-    for (const [hash, relatedStreams] of hashToStreams.entries()) {
-      const isCached = cachedHashes.has(hash);
-      for (const s of relatedStreams) {
-        s.cached = isCached;
-        if (isCached) {
-          this.parser.applyDebridBadge(s, badgeProvider);
-        }
-      }
-    }
-  }
-
-  private async fetchDebridCachedHashes(
-    hashes: string[],
-    options?: SourceFetchOptions
-  ): Promise<Set<string>> {
-    const provider = options?.debridProvider;
-    const rdToken = options?.realdebridToken;
-    const tbToken = options?.torboxToken;
-
-    if (provider === 'torbox') {
-      return TorboxService.fetchCachedInfoHashes(hashes, tbToken);
-    }
-
-    if (provider === 'realdebrid') {
-      return RealDebridService.fetchCachedInfoHashes(hashes, rdToken);
-    }
-
-    if (tbToken) {
-      return TorboxService.fetchCachedInfoHashes(hashes, tbToken);
-    }
-
-    if (rdToken) {
-      return RealDebridService.fetchCachedInfoHashes(hashes, rdToken);
-    }
-
-    return new Set<string>();
-  }
-  private async fetchMeilisearchResults(query: string): Promise<TorrentLike[]> {
-    const url = new URL(`${this.baseUrl}/search`);
-    url.searchParams.set('q', query);
-    url.searchParams.set('limit', '200');
-    try {
-      const response = await request(url.toString(), {
-        signal: AbortSignal.timeout(5_000),
-        headers: { Accept: 'application/json' },
-      });
-      if (response.statusCode >= 400) {
-        await response.body.dump().catch(() => undefined);
-        return [];
-      }
-      const payload = await response.body.json();
-      return this.parser.normalizeTorrentPayload(payload);
-    } catch {
-      return [];
-    }
-  }
-
   private hasSufficientResults(results: TorrentLike[], query: string, context: MatchContext): boolean {
     if (results.length === 0) return false;
     
@@ -727,12 +591,6 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
       logReq(context, `⚡ Fast-path aprovou '${query}': ${relevantResults.length} resultados válidos em ${uniqueIndexers.size} indexadores.`);
     }
     return isSufficient;
-  }
-
-  private warmIndexerCacheInBackground(query: string, existingResults: TorrentLike[], context?: MatchContext): void {
-    globalQueue.add(async () => {
-      await this.fetchSearchResultsFromIndexers(query, undefined, context);
-    }, `Atualização de Fundo para '${query}'`, context);
   }
 
   private warmRemainingQueriesInBackground(queries: string[], context: MatchContext): void {
@@ -918,59 +776,6 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     return `slow|${this.getSearchCacheKey(query)}`;
   }
 
-  private async fetchMultiSearchResults(
-    queries: string[],
-    fastPathOnly = false,
-    context: MatchContext,
-    forceFresh = false,
-    midPathQueries?: string[]
-  ): Promise<TorrentLike[]> {
-    if (!queries || queries.length === 0) return [];
-
-    const cacheKey = this.getSearchCacheKey(queries.join('|'));
-    const cached = TorrentIndexerProvider.searchCache.get(cacheKey);
-    if (!forceFresh && cached && Date.now() - cached.ts < TorrentIndexerProvider.SEARCH_CACHE_TTL_MS) {
-      return cached.data;
-    }
-
-    // 1) Fase 1: Busca em massa no Meilisearch
-    const searchResults = await this.fetchBulkMeilisearchResults(queries);
-    const primaryQuery = queries[0] ?? '';
-
-    // Se tivermos resultados suficientes ou for apenas FastPath, retornamos
-    if (fastPathOnly || this.hasSufficientResults(searchResults, primaryQuery, context)) {
-      if (fastPathOnly) {
-        return searchResults;
-      }
-      const ranked = this.parser.rankTorrentsByQuery(searchResults, primaryQuery);
-      if (!forceFresh) {
-        TorrentIndexerProvider.searchCache.set(cacheKey, { ts: Date.now(), data: ranked });
-      }
-      return ranked;
-    }
-
-    // 2) Fase 2: Mid-Path (Sync Scrape via indexers específicos rápidos)
-    // Sempre usar as 3 queries otimizadas (IMDB ID, titulo inglês, titulo português)
-    const queriesToUse = midPathQueries && midPathQueries.length > 0 ? midPathQueries : queries.slice(0, 3);
-    const indexerResults = await this.fetchBulkSearchResultsFromIndexers(queriesToUse, {
-      timeoutMs: 8000,
-    }, context);
-
-    const merged = this.parser.rankTorrentsByQuery(
-      this.parser.mergeTorrentResults(searchResults, indexerResults),
-      primaryQuery,
-    );
-
-    if (!forceFresh) {
-      TorrentIndexerProvider.searchCache.set(cacheKey, { ts: Date.now(), data: merged });
-      
-      // Se não for forceFresh, fazemos um warm-up completo em background (incluindo bludv)
-      this.warmIndexerCacheInBackground(primaryQuery, merged, context);
-    }
-
-    return merged;
-  }
-
   /**
    * Uma chamada /search por query, em paralelo: o /search do torrent-indexer
    * lê só o primeiro q, então várias q numa chamada só pesquisavam o IMDb.
@@ -1014,73 +819,6 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
 
     // Em ordem de query (IMDb primeiro), sem repetir torrent
     return settled.reduce<TorrentLike[]>((acc, items) => this.parser.mergeTorrentResults(acc, items), []);
-  }
-
-  private async fetchBulkSearchResultsFromIndexers(
-    queries: string[],
-    options?: FallbackSearchOptions,
-    context?: MatchContext,
-  ): Promise<TorrentLike[]> {
-    if (!TorrentIndexerProvider.ENABLE_FALLBACK_INDEXER_SEARCH) return [];
-    if (!queries || queries.length === 0) return [];
-
-    const globalDeadlineMs = options?.timeoutMs ?? 10_000;
-    const topQueries = queries.slice(0, 3);
-
-    // Deadline global: garante que NUNCA ultrapassamos o timeout,
-    // mesmo com fallback cascateado (multi → individual).
-    let deadlineHandle: ReturnType<typeof setTimeout> | undefined;
-    const deadlineTimer = new Promise<TorrentLike[]>((resolve) => {
-      deadlineHandle = setTimeout(() => {
-        logReq(context, `⏰ Mid-path deadline global de ${globalDeadlineMs}ms atingido.`);
-        resolve([]);
-      }, globalDeadlineMs);
-    });
-
-    const startedAt = Date.now();
-    const doSearch = async (): Promise<TorrentLike[]> => {
-      const indexers = (await this.fetchIndexerNames(false))
-        .filter((name) => topQueries.some((q) => this.indexerSupportsQuery(name, q)));
-      if (indexers.length === 0) return [];
-
-      // Fan-out no torrent-indexer: uma chamada para todos os indexers x queries,
-      // com cache, dedup por info_hash e resposta parcial no deadline.
-      if (TorrentIndexerProvider.indexerCatalogCache?.multi !== false) {
-        const remainingMs = globalDeadlineMs - (Date.now() - startedAt);
-        const multiResults = await this.fetchMultiIndexerSearch(topQueries, indexers, remainingMs, context);
-        if (multiResults) return multiResults;
-      }
-
-      // Fallback (torrent-indexer sem /indexers/multi, ou ele falhou): chamadas
-      // individuais só nos indexers mais rápidos pelo histórico local.
-      const avgTimes = Array.from(TorrentIndexerProvider.indexerPerformance.values())
-        .map(s => s.avgMs)
-        .filter(ms => ms > 0);
-      const overallAvg = avgTimes.length > 0 
-        ? avgTimes.reduce((a, b) => a + b, 0) / avgTimes.length 
-        : 500;
-      const maxAllowedMs = overallAvg * 1.3;
-
-      const selected = indexers
-        .filter((name) => {
-          const slug = this.parser.normalizeIndexerSlug(name);
-          const perf = TorrentIndexerProvider.indexerPerformance.get(slug);
-          if (!perf || perf.avgMs === 0) return true;
-          return perf.avgMs <= maxAllowedMs;
-        })
-        .slice(0, 4);
-      const candidates = selected.length > 0 ? selected : indexers.slice(0, 6);
-
-      logReq(context, `↩️ Fallback por indexer: [${topQueries.join(', ')}] em [${candidates.join(',')}] (Deadline: ${globalDeadlineMs}ms)`);
-      return await this.fetchSearchResultsFromCandidates(topQueries, candidates, context);
-    };
-
-    // Promise.race garante que o deadline global é respeitado
-    try {
-      return await Promise.race([doSearch(), deadlineTimer]);
-    } finally {
-      if (deadlineHandle) clearTimeout(deadlineHandle);
-    }
   }
 
   /**
@@ -1278,19 +1016,6 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
       this.recordIndexerPerformance(normalizedIndexer, Date.now() - startedAt, 0);
       return [];
     }
-  }
-
-  private shouldBoostWithFallback(results: TorrentLike[]): boolean {
-    if (results.length === 0) {
-      return true;
-    }
-
-    if (results.length < TorrentIndexerProvider.HYBRID_MIN_RESULTS) {
-      return true;
-    }
-
-    const uniqueIndexers = this.collectIndexerSlugs(results);
-    return uniqueIndexers.size < TorrentIndexerProvider.HYBRID_MIN_INDEXERS;
   }
 
   private compareIndexerPriority(a: string, b: string): number {

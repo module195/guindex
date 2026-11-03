@@ -120,7 +120,7 @@ test('mid-path usa /indexers/multi com indexers saudáveis e deadline_ms', async
   t.after(srv.close);
   const provider = new TorrentIndexerProvider('torrent-indexer', srv.base);
 
-  const results = await provider.fetchBulkSearchResultsFromIndexers(['tt0133093', 'Matrix'], { timeoutMs: 8000 });
+  const results = await provider.startMultiSearch(['tt0133093', 'Matrix'], 8000);
   assert.equal(results.length, 2);
   const byHash = Object.fromEntries(results.map((r) => [r.info_hash, r]));
   assert.equal(byHash[HASH_A].indexer, 'comando_torrents', 'indexer vem de found_in[0]');
@@ -142,7 +142,7 @@ test('mid-path usa /indexers/multi com indexers saudáveis e deadline_ms', async
   assert.equal(TorrentIndexerProvider.indexerFailureState.get('comando_torrents')?.consecutiveFailures, 1);
 });
 
-test('torrent-indexer antigo (sem v=2 e sem multi): cai nas chamadas por indexer', async (t) => {
+test('torrent-indexer antigo (sem v=2 e sem multi): multi desligado, Fase 3 chama por indexer', async (t) => {
   const srv = await startServer({
     '/sources': () => [200, { indexer_names: ['torrent-dos-filmes', 'comando_torrents'] }],
     '/indexers/*': (url) => [200, {
@@ -153,13 +153,14 @@ test('torrent-indexer antigo (sem v=2 e sem multi): cai nas chamadas por indexer
   t.after(srv.close);
   const provider = new TorrentIndexerProvider('torrent-indexer', srv.base);
 
-  const results = await provider.fetchBulkSearchResultsFromIndexers(['Matrix'], { timeoutMs: 5000 });
+  assert.equal(await provider.startMultiSearch(['Matrix'], 5000), undefined, 'sem multi: a Fase 2 não tem o que esperar');
+  const results = await provider.fetchFastestIndexersSearch(['Matrix'], 5000);
   assert.equal(results.length, 1);
   assert.equal(srv.calls.filter((u) => u.pathname === '/indexers/multi').length, 0);
   assert.equal(srv.calls.filter((u) => u.pathname === '/indexers/comando_torrents').length, 1);
 });
 
-test('/indexers/multi 404: marca multi indisponível e usa o fallback por indexer', async (t) => {
+test('/indexers/multi 404: marca multi indisponível e a Fase 3 chama por indexer', async (t) => {
   const srv = await startServer({
     '/sources': () => [200, { ...SOURCES_V2, features: {} }],
     '/indexers/multi': () => [404, {}],
@@ -171,11 +172,13 @@ test('/indexers/multi 404: marca multi indisponível e usa o fallback por indexe
   t.after(srv.close);
   const provider = new TorrentIndexerProvider('torrent-indexer', srv.base);
 
-  const results = await provider.fetchBulkSearchResultsFromIndexers(['Matrix'], { timeoutMs: 5000 });
-  assert.equal(results.length, 1);
+  assert.equal(await provider.startMultiSearch(['Matrix'], 5000), undefined);
   assert.equal(TorrentIndexerProvider.indexerCatalogCache.multi, false);
+  const results = await provider.fetchFastestIndexersSearch(['Matrix'], 5000);
+  assert.equal(results.length, 1);
 
-  await provider.fetchBulkSearchResultsFromIndexers(['Matrix 2'], { timeoutMs: 5000 });
+  assert.equal(await provider.startMultiSearch(['Matrix 2'], 5000), undefined);
+  await provider.fetchFastestIndexersSearch(['Matrix 2'], 5000);
   assert.equal(srv.calls.filter((u) => u.pathname === '/indexers/multi').length, 1, 'não tenta o multi de novo');
   assert.equal(srv.calls.filter((u) => u.pathname === '/indexers/betor').length, 0, 'betor não recebe texto');
 });
