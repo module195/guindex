@@ -44,10 +44,10 @@ import {
   PHASE3_MIN_MS,
   PHASE3_MAX_QUERIES,
   IMDB_QUERY_REGEX,
-  STRONG_EPISODE_REGEX,
   logReq,
 } from './torrent-indexer-shared.js';
 import { BoundedMap } from '../utils/bounded-map.js';
+import { selectBestFile } from './file-selection.js';
 
 export { logReq } from './torrent-indexer-shared.js';
 const BACKGROUND_WARM_DELAY_MS = 2000;
@@ -1613,91 +1613,28 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
       return undefined;
     }
 
-    const scored = files
-      .map((file) => ({ file, score: this.scoreTorrentFile(file, context) }))
-      .sort((a, b) => {
-        if (b.score !== a.score) return b.score - a.score;
-        return (b.file.size ?? 0) - (a.file.size ?? 0);
-      });
+    // Mesma regra e mesmo contexto que o TorBox e o RD usam no play (ver
+    // file-selection.ts), para o fileIdx mostrado ser o arquivo que toca.
+    const episodeList = this.parser.extractEpisodeList(torrent);
+    const best = selectBestFile(
+      files,
+      (file) => ({ path: file.path, bytes: file.size ?? 0 }),
+      {
+        type: context.type,
+        season: context.parsed.season,
+        episode: context.parsed.episode,
+        episodeTitle: context.episodeTitle,
+        year: this.parser.extractYear(torrent) ?? context.releaseYear,
+        episodeList: episodeList && episodeList.length > 0 ? episodeList : undefined,
+      }
+    );
 
-    const best = scored[0]?.file;
-
-    // Reject if the best file is too small — likely an ad MP4 or NFO
+    // Melhor arquivo pequeno demais: propaganda ou NFO, sem fileIdx
     if (best && best.size !== undefined && best.size < TorrentIndexerProvider.MIN_VIDEO_SIZE) {
       return undefined;
     }
 
     return best;
-  }
-
-  private scoreTorrentFile(file: IndexedTorrentFile, context: MatchContext): number {
-    const normalizedPath = this.parser.normalizeForComparison(file.path);
-    const normalizedType = context.type.toLowerCase();
-    let score = 0;
-
-    // Prefer real video files and penalize common junk files.
-    if (this.parser.isVideoPath(file.path)) score += 30;
-    if (/\b(sample|trailer|extras?|bonus|featurette|behindthescenes|creditos|poster|rarbg|nfo|subs?|propaganda|anuncio|promo|preview|teaser)\b/i.test(file.path)) {
-      score -= 25;
-    }
-    if (/\.(txt|url|nfo|jpg|jpeg|png|gif|bmp|ico|md|html|htm|exe|bat|lnk|srt|sub|ass|ssa|idx)$/i.test(file.path)) {
-      score -= 40;
-    }
-
-    // Penalize tiny files — almost certainly ads, readme, or fake content
-    if (file.size !== undefined && file.size < TorrentIndexerProvider.MIN_VIDEO_SIZE) {
-      score -= 50;
-    }
-
-    for (const title of context.targetTitles) {
-      const normalizedTitle = this.parser.normalizeForComparison(title);
-      if (!normalizedTitle) continue;
-      if (normalizedPath.includes(normalizedTitle)) {
-        score += 10;
-        break;
-      }
-    }
-
-    if (context.releaseYear && normalizedPath.includes(String(context.releaseYear))) {
-      score += 6;
-    }
-
-    const fileSeason = this.parser.extractSeasonFromTorrent({ title: file.path });
-    const fileEpisode = this.parser.extractEpisodeFromTorrent({ title: file.path });
-    const episodeList = this.parser.extractEpisodeList({ title: file.path, filesEpisodes: file.path });
-
-    if (normalizedType === 'movie') {
-      if (fileSeason !== undefined || fileEpisode !== undefined) {
-        score -= 20;
-      }
-      if (STRONG_EPISODE_REGEX.test(file.path)) {
-        score -= 12;
-      }
-    } else if (context.parsed.season !== undefined) {
-      if (fileSeason !== undefined) {
-        score += fileSeason === context.parsed.season ? 12 : -18;
-      }
-      if (context.parsed.episode !== undefined) {
-        if (fileEpisode !== undefined) {
-          score += fileEpisode === context.parsed.episode ? 18 : -24;
-        }
-        if (episodeList && episodeList.length > 0) {
-          score += episodeList.includes(context.parsed.episode) ? 14 : -24;
-        }
-      }
-    }
-
-    score += Math.log10((file.size ?? 0) + 1);
-
-    // Prefer Portuguese-language files (Dublado > Legendado > unmarked)
-    const lowerPath = file.path.toLowerCase();
-    if (/\b(dublado|dublada|dual|ptbr|pt[\s._-]?br|nacional)\b/i.test(lowerPath)) {
-      score += 8;
-    } else if (/\b(legendado|leg)\b/i.test(lowerPath)) {
-      score += 3;
-    }
-
-    return score;
   }
 
 }
