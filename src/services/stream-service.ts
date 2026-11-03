@@ -171,6 +171,9 @@ export class StreamService {
 
     // Build rich description
     const richInfo: string[] = [];
+    if (sourceStream.inLibrary) {
+      richInfo.push('🗃️ Já está na sua TorBox');
+    }
     if (sourceStream.contextString) {
       richInfo.push(`📌 ${sourceStream.contextString}`);
     }

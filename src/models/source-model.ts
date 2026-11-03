@@ -12,6 +12,8 @@ export interface StreamContext {
 }
 export interface SourceStream {
   cached?: boolean;
+  /** O torrent já está na conta do debrid do usuário (biblioteca TorBox) */
+  inLibrary?: boolean;
   name?: string;
   title?: string;
   description?: string;
