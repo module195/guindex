@@ -43,6 +43,8 @@ export interface TorboxTorrent {
   download_present?: boolean;
   progress?: number;
   download_state?: TorboxDownloadState;
+  /** Data em que o torrent entrou na conta (ISO 8601) */
+  created_at?: string;
   files?: TorboxFile[];
 }
 

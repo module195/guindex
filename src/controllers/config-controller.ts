@@ -3,6 +3,7 @@
  * Gera o manifest Stremio e a pagina de configuracao do addon.
  */
 
+import { LIBRARY_CATALOG_ENABLED, LIBRARY_ID_PREFIX, LIBRARY_TYPE, libraryCatalogManifestEntry } from '../services/torbox-library.js';
 import type { AddonManifest } from '../models/config-model.js';
 import { ConfigService } from '../services/config-service.js';
 
@@ -27,15 +28,31 @@ export class ConfigController {
   private config = ConfigService.loadConfig();
 
   /** O manifest só depende de isConfigured e de variáveis de ambiente lidas no boot */
-  private static manifestCache = new Map<boolean, AddonManifest>();
+  private static manifestCache = new Map<string, AddonManifest>();
 
-  createAddonManifest(isConfigured: boolean = false): AddonManifest {
-    const cached = ConfigController.manifestCache.get(isConfigured);
+  /**
+   * `withLibrary`: o pedido tem token TorBox, e o manifest leva o catálogo
+   * "Minha TorBox" (catalog/meta/stream com prefixo gdxlib:).
+   */
+  createAddonManifest(isConfigured: boolean = false, withLibrary: boolean = false): AddonManifest {
+    const library = withLibrary && isConfigured && LIBRARY_CATALOG_ENABLED;
+    const key = `${isConfigured}|${library}`;
+    const cached = ConfigController.manifestCache.get(key);
     if (cached) {
       return cached;
     }
     const manifest = this.buildAddonManifest(isConfigured);
-    ConfigController.manifestCache.set(isConfigured, manifest);
+    if (library) {
+      manifest.catalogs = [libraryCatalogManifestEntry()];
+      manifest.types = [...manifest.types, LIBRARY_TYPE];
+      manifest.idPrefixes = [...manifest.idPrefixes, LIBRARY_ID_PREFIX];
+      manifest.resources = [
+        { name: 'stream', types: ['movie', 'series', LIBRARY_TYPE], idPrefixes: ['tt', LIBRARY_ID_PREFIX] },
+        { name: 'catalog', types: [LIBRARY_TYPE] },
+        { name: 'meta', types: [LIBRARY_TYPE], idPrefixes: [LIBRARY_ID_PREFIX] }
+      ];
+    }
+    ConfigController.manifestCache.set(key, manifest);
     return manifest;
   }
 

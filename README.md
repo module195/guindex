@@ -429,6 +429,7 @@ npm start
 | `TORBOX_CHECKCACHED_TIMEOUT_MS` | `15000` | Timeout da consulta de cache no TorBox. O `/stream` espera por ela so ate o fim do orcamento; o resto roda em segundo plano e enche o cache de disponibilidade. Consulta sem resposta em 3 s abre outra ao lado, so com os hashes ainda sem resposta, e vale a primeira resposta, para todos que esperam por ela |
 | `GUINDEX_TORBOX_LIBRARY` | `true` | Itens da conta TorBox casados com o titulo entram no `/stream` (biblioteca) |
 | `GUINDEX_TORBOX_LIBRARY_WAIT_MS` | `750` | Espera maxima pela lista da conta TorBox depois que a busca termina (sempre dentro do orcamento) |
+| `GUINDEX_TORBOX_LIBRARY_CATALOG` | `true` | Catalogo "Minha TorBox" no manifest `/torbox/TOKEN/` (catalog, meta e stream dos itens da conta) |
 | `ALLOW_ENV_DEBRID_TOKEN` | `false` | Com `true`, pedidos sem token na URL usam `TORBOX_TOKEN`/`REALDEBRID_TOKEN` do env. So para instancia privada: os links `/resolve` levam esse token, entao qualquer um que acesse `/stream` passa a usar a conta do dono |
 | `TORBOX_TOKEN` / `REALDEBRID_TOKEN` | — | Token do dono, lido so com `ALLOW_ENV_DEBRID_TOKEN=true` |
 
@@ -477,6 +478,10 @@ Acesse a pagina de configuracao da sua instancia e siga as instrucoes. A URL do 
 ```
 https://seu-dominio.com/torbox/SEU_TOKEN/manifest.json
 ```
+
+### Catalogo "Minha TorBox"
+
+Com o manifest no formato `/torbox/SEU_TOKEN/manifest.json`, o GuIndex adiciona o catalogo **Minha TorBox** (tipo `other`), como o catalogo do addon Library do AIOStreams: os torrents ja baixados na conta, com busca (sem acento e sem diferenciar maiusculas), ordenacao por data de entrada ou titulo (no filtro de genero) e a acao "🔄 Atualizar biblioteca", que descarta o cache de 2 min da lista. Abrir um item mostra um video por arquivo de video (temporada/episodio lidos do nome); o play pede o link direto do torrent que ja esta na conta (`/torbox/TOKEN/resolve?linkType=library&torrentId=..&fileId=..`), sem `createtorrent`. Rotas: `/torbox/TOKEN/catalog/other/guindex.torbox.library[/extra].json`, `/torbox/TOKEN/meta/other/gdxlib:<id>.json` e `/torbox/TOKEN/stream/other/gdxlib:<id>:<arquivo>.json`. Quem ja instalou o addon precisa reinstalar para o Stremio ler o manifest novo. `GUINDEX_TORBOX_LIBRARY_CATALOG=false` tira o catalogo.
 
 ### Uso com AIOStreams
 

@@ -19,7 +19,7 @@ export interface AddonManifest {
   logo?: string;
   background?: string;
   catalogs: any[];
-  resources: string[];
+  resources: Array<string | { name: string; types: string[]; idPrefixes?: string[] }>;
   types: string[];
   idPrefixes: string[];
   behaviorHints: {
