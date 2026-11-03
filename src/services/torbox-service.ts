@@ -15,6 +15,7 @@ import type { StreamContext } from '../models/source-model.js';
 import { TorboxClient, type TorboxFile, type TorboxTorrent, type TorboxWebDl } from './torbox-client.js';
 import { timedSleep } from './playback-timing.js';
 import { BoundedMap } from '../utils/bounded-map.js';
+import { selectBestFile } from './file-selection.js';
 
 type AvailabilityCacheEntry = { cached: boolean; expires: number };
 type AvailabilityInFlight = { answer: Promise<boolean | undefined>; startedAt: number };
@@ -49,17 +50,9 @@ const CHECK_CACHED_TIMEOUT_MS = (() => {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 15_000;
 })();
 
-// ── Constants ────────────────────────────────────────────────────────────────
-const MIN_VIDEO_BYTES = 5 * 1024 * 1024; // 5 MB – anything smaller is junk
 
-const VIDEO_EXTENSIONS =
-  /\.(mp4|mkv|mov|avi|ts|m4v|m2ts|wmv|flv|webm|divx|xvid|vob|iso|3gp|ogv|rmvb)$/i;
 
-const JUNK_EXTENSIONS =
-  /\.(txt|url|nfo|jpg|jpeg|png|gif|bmp|ico|md|html?|exe|bat|lnk|srt|sub|ass|ssa|idx|sup|mka|rar|zip|7z|pdf|doc|docx|db|torrent)$/i;
 
-const JUNK_CONTENT_REGEX =
-  /\b(sample|trailer|extras?|bonus|featurette|behind.?the.?scenes|credits?|creditos|poster|rarbg|nfo|subs?|propaganda|anuncio|promo|preview|teaser|1xbet|banner|ad[s_]|screener|watermark)\b/i;
 
 export interface TorboxDirectResult {
   url: string;
@@ -489,227 +482,11 @@ export class TorboxService {
   // ── File Selection Engine ───────────────────────────────────────────────
 
   private selectBestFile(files: TorboxFile[], context?: StreamContext): TorboxFile | undefined {
-    const videoFiles = files.filter((f) => this.isVideoFile(f.name ?? f.short_name ?? ''));
-    const candidates = videoFiles.length > 0 ? videoFiles : files;
-    if (candidates.length === 0) return undefined;
-
-    // Filter out junk files
-    const cleanCandidates = candidates.filter((f) => {
-      const path = f.name || f.short_name || '';
-      return !this.isJunkFile(path, f.size ?? 0);
-    });
-
-    const pool = cleanCandidates.length > 0 ? cleanCandidates : candidates;
-
-    const withScore = pool
-      .map((f) => ({ file: f, score: this.scoreFileAgainstContext(f, context) }))
-      .sort((a, b) => {
-        if (b.score !== a.score) return b.score - a.score;
-        return (b.file.size ?? 0) - (a.file.size ?? 0);
-      });
-
-    return withScore[0]?.file;
-  }
-
-  // ── Scoring ─────────────────────────────────────────────────────────────
-
-  private scoreFileAgainstContext(file: TorboxFile, context?: StreamContext): number {
-    const rawPath = file.name || file.short_name || file.path || '';
-    if (!context) {
-      let score = Math.log10((file.size ?? 0) + 1);
-      if (this.isJunkFile(rawPath, file.size ?? 0)) {
-        score -= 50;
-      }
-      return score;
-    }
-
-    const normalizedPath = this.normalize(rawPath);
-    const rawLower = rawPath.toLowerCase();
-    let score = 0;
-
-    // ── Junk penalty ──────────────────────────────────────────────────
-    if (this.isJunkFile(rawPath, file.size ?? 0)) {
-      score -= 50;
-    }
-
-    // ── Year match ────────────────────────────────────────────────────
-    if (context.year && normalizedPath.includes(String(context.year))) {
-      score += 4;
-    }
-
-    // ── Title match ───────────────────────────────────────────────────
-    if (context.title) {
-      const t = this.normalize(context.title);
-      if (t && normalizedPath.includes(t)) score += 6;
-    }
-
-    // ── Episode title match (strongest signal) ────────────────────────
-    if (context.episodeTitle) {
-      const t = this.normalize(context.episodeTitle);
-      if (t && normalizedPath.includes(t)) score += 14;
-    }
-
-    // ── Movie penalty for episodic files ──────────────────────────────
-    if (context.type === 'movie' && /\bs\d{1,2}e\d{1,3}\b|\b\d{1,2}[x\u00d7]\d{1,3}\b/i.test(rawLower)) {
-      score -= 20;
-    }
-
-    // ── Episode list bonus ────────────────────────────────────────────
-    if (Array.isArray(context.episodeList) && context.episodeList.length > 0 && context.episode !== undefined) {
-      const hasRequestedEpisode = context.episodeList.some((ep) => {
-        const epPadded = String(ep).padStart(2, '0');
-        return new RegExp(`\\be${ep}\\b|\\be${epPadded}\\b|\\bep${ep}\\b|\\bep${epPadded}\\b|\\b${ep}[x\u00d7]\\d{1,2}\\b|\\b\\d{1,2}[x\u00d7]${epPadded}\\b`, 'i').test(rawLower);
-      });
-      if (hasRequestedEpisode) {
-        score += 12;
-      }
-    }
-
-    // ── Episode matching (comprehensive) ──────────────────────────────
-    if (context.episode !== undefined) {
-      score += this.scoreEpisodeMatch(rawPath, normalizedPath, context);
-    }
-
-    return score + Math.log10((file.size ?? 0) + 1);
-  }
-
-  /**
-   * Comprehensive episode matching across all known filename patterns.
-   * Receives BOTH the raw path (for ×, accents) and the normalized path.
-   */
-  private scoreEpisodeMatch(rawPath: string, normalizedPath: string, context: StreamContext): number {
-    const episode = context.episode;
-    if (episode === undefined) return 0;
-
-    const ep = String(episode);
-    const ep2 = ep.padStart(2, '0');
-    const season = context.season;
-
-    let matchScore = 0;
-
-    // ────────────────────────────────────────────────────────────────────
-    // 1) Normalized-path token matching
-    // ────────────────────────────────────────────────────────────────────
-    const normalizedTokens: string[] = [
-      `e${ep}`, `e${ep2}`,
-      `ep${ep}`, `ep${ep2}`,
-      `episode${ep}`, `episode${ep2}`,
-      `episodio${ep}`, `episodio${ep2}`,
-      `capitulo${ep}`, `capitulo${ep2}`,
-      `folge${ep}`, `folge${ep2}`,
-      `part${ep}`, `part${ep2}`,
-      `parte${ep}`, `parte${ep2}`,
-      `cap${ep}`, `cap${ep2}`,
-    ];
-
-    if (season !== undefined) {
-      const s = String(season);
-      const s2 = s.padStart(2, '0');
-      normalizedTokens.push(
-        `s${s}e${ep}`, `s${s}e${ep2}`,
-        `s${s2}e${ep}`, `s${s2}e${ep2}`,
-        `season${s}episode${ep}`, `season${s2}episode${ep2}`,
-        `temporada${s}episodio${ep}`, `temporada${s2}episodio${ep2}`,
-        `${s}x${ep}`, `${s}x${ep2}`,
-        `${s2}x${ep}`, `${s2}x${ep2}`,
-        // Concatenated: normalize() strips × so 3×02 → "302"
-        `${s}${ep2}`, `${s2}${ep2}`,
-      );
-    }
-
-    const processedTokens = normalizedTokens.map((t) => this.normalize(t)).filter(Boolean);
-    for (const token of processedTokens) {
-      if (normalizedPath.includes(token)) {
-        matchScore += token.length >= 5 ? 12 : token.length >= 3 ? 8 : 5;
-      }
-    }
-
-    // ────────────────────────────────────────────────────────────────────
-    // 2) Raw-path matching (for × and special chars)
-    // ────────────────────────────────────────────────────────────────────
-    const rawLower = rawPath.toLowerCase();
-
-    // 2a) N×NN pattern (× = U+00D7)
-    if (season !== undefined) {
-      const s = String(season);
-      const s2 = s.padStart(2, '0');
-      const crossPatterns = [
-        `${s}\u00d7${ep}`, `${s}\u00d7${ep2}`,
-        `${s2}\u00d7${ep}`, `${s2}\u00d7${ep2}`,
-      ];
-      for (const cp of crossPatterns) {
-        if (rawLower.includes(cp)) {
-          matchScore += 14;
-        }
-      }
-    }
-
-    // 2b) Bare number at start of filename
-    const bareEpRegex = new RegExp(`(?:^|[/\\\\])0*${episode}\\s*[-._\\s]+[a-z]`, 'i');
-    if (bareEpRegex.test(rawPath)) {
-      matchScore += 12;
-    }
-
-    // 2c) Bare number + extension: "02.mp4"
-    const bareExtRegex = new RegExp(`(?:^|[/\\\\])0*${episode}\\.(mkv|mp4|avi|m4v|ts)$`, 'i');
-    if (bareExtRegex.test(rawPath)) {
-      matchScore += 10;
-    }
-
-    // 2d) Portuguese ordinal: "Episódio 2", "Capítulo 02"
-    const ptRegex = new RegExp(`(?:epis[oó]dio|cap[ií]tulo|cap\\.?)\\s*0*${episode}\\b`, 'i');
-    if (ptRegex.test(rawPath)) {
-      matchScore += 12;
-    }
-
-    // 2e) Hash notation: #02
-    if (rawLower.includes(`#${ep2}`) || rawLower.includes(`#${ep}`)) {
-      matchScore += 8;
-    }
-
-    // ────────────────────────────────────────────────────────────────────
-    // 3) Wrong-episode penalty
-    // ────────────────────────────────────────────────────────────────────
-    if (season !== undefined && matchScore > 0) {
-      const otherEpMatch = rawLower.match(/s\d{1,3}e(\d{1,3})/i) ||
-        rawLower.match(/\d{1,2}[x\u00d7](\d{1,3})/i);
-      if (otherEpMatch) {
-        const detectedEp = parseInt(otherEpMatch[1] ?? '', 10);
-        if (!isNaN(detectedEp) && detectedEp !== episode) {
-          matchScore -= 20;
-        }
-      }
-    }
-
-    // ────────────────────────────────────────────────────────────────────
-    // 4) Episode list bonus
-    // ────────────────────────────────────────────────────────────────────
-    if (context.episodeList && context.episodeList.includes(episode)) {
-      matchScore += 2;
-    }
-
-    return matchScore;
-  }
-
-  // ── Utility Methods ─────────────────────────────────────────────────────
-
-  private isVideoFile(path: string): boolean {
-    return VIDEO_EXTENSIONS.test(path);
-  }
-
-  private isJunkFile(path: string, bytes: number): boolean {
-    if (JUNK_EXTENSIONS.test(path)) return true;
-    if (JUNK_CONTENT_REGEX.test(path)) return true;
-    if (bytes > 0 && bytes < MIN_VIDEO_BYTES) return true;
-    return false;
-  }
-
-  private normalize(value: string): string {
-    return value
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^a-z0-9]+/gi, '')
-      .toLowerCase();
+    return selectBestFile(
+      files,
+      (file) => ({ path: file.name || file.short_name || file.path || '', bytes: file.size ?? 0 }),
+      context
+    );
   }
 
   private placeholderResult(): TorboxDirectResult {
