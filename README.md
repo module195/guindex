@@ -433,6 +433,7 @@ npm start
 | `GUINDEX_TORBOX_LIBRARY` | `true` | Itens da conta TorBox casados com o titulo entram no `/stream` (biblioteca) |
 | `GUINDEX_TORBOX_LIBRARY_WAIT_MS` | `750` | Espera maxima pela lista da conta TorBox depois que a busca termina (sempre dentro do orcamento) |
 | `GUINDEX_TORBOX_LIBRARY_CATALOG` | `true` | Catalogo "Minha TorBox" no manifest `/torbox/TOKEN/` (catalog, meta e stream dos itens da conta) |
+| `GUINDEX_TORBOX_LIBRARY_INDEXER` | `Library TB` | `behaviorHints.indexer` dos streams que vem so da conta TorBox (catalogo e busca); no AIOStreams, `{stream.indexer}` mostra esse nome, como o addon Library |
 | `ALLOW_ENV_DEBRID_TOKEN` | `false` | Com `true`, pedidos sem token na URL usam `TORBOX_TOKEN`/`REALDEBRID_TOKEN` do env. So para instancia privada: os links `/resolve` levam esse token, entao qualquer um que acesse `/stream` passa a usar a conta do dono |
 | `TORBOX_TOKEN` / `REALDEBRID_TOKEN` | — | Token do dono. Lido com `ALLOW_ENV_DEBRID_TOKEN=true` ou no modo privado (`ADDON_ACCESS_KEY`) |
 | `ADDON_ACCESS_KEY` | — | Liga o modo privado (veja abaixo). Use 32+ caracteres aleatorios: `openssl rand -hex 24` |

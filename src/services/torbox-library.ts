@@ -25,6 +25,12 @@ const SEARCH_THRESHOLD = 60;
 /** Catálogo da conta TorBox no manifest (com token TorBox). */
 export const LIBRARY_CATALOG_ENABLED = parseBoolean(readEnv('GUINDEX_TORBOX_LIBRARY_CATALOG'), true);
 
+/**
+ * Indexer dos streams que vêm da conta TorBox (behaviorHints.indexer), como o
+ * addon Library do AIOStreams: no formatter, {stream.indexer} sai "Library TB".
+ */
+export const LIBRARY_INDEXER_LABEL = readEnv('GUINDEX_TORBOX_LIBRARY_INDEXER')?.trim() || 'Library TB';
+
 export enum LibraryGenre {
   ADDED_DESC = 'Adicionados ↓',
   ADDED_ASC = 'Adicionados ↑',
@@ -289,6 +295,7 @@ export interface LibraryStream {
   fileIdx?: number;
   behaviorHints: {
     bingeGroup: string;
+    indexer: string;
     filename?: string;
     videoSize?: number;
     folderSize?: number;
@@ -327,6 +334,7 @@ export async function fetchLibraryStreams(token: string, id: string, resolveBase
     url: buildLibraryResolveUrl(resolveBase, token, ref),
     behaviorHints: {
       bingeGroup: `guindex-torbox-library-${item.id}`,
+      indexer: LIBRARY_INDEXER_LABEL,
       filename: filename || undefined,
       videoSize: size,
       folderSize: file ? item.size : undefined,

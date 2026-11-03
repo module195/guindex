@@ -148,6 +148,7 @@ test('stream de um arquivo e play pelo torrent da conta', async (t) => {
   assert.equal(stream.fileIdx, 1);
   assert.equal(stream.behaviorHints.filename, 'Lupin.S04E01.1080p.mkv');
   assert.ok(stream.behaviorHints.bingeGroup);
+  assert.equal(stream.behaviorHints.indexer, 'Library TB');
   const url = new URL(stream.url);
   assert.equal(url.pathname, `/torbox/${TOKEN}/resolve`);
   assert.equal(url.searchParams.get('linkType'), 'library');

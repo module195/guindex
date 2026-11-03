@@ -137,6 +137,13 @@ test('item da conta que casa com o título vira stream cacheado; o que a busca t
   });
   assert.match(meta.title, /🗃️ Já está na sua TorBox/);
   assert.equal(meta.infoHash, HASH_4K);
+  assert.equal(meta.behaviorHints.indexer, 'Library TB', '{stream.indexer} do AIOStreams mostra o Library');
+  const fromSearch = StreamService.createStreamMetadata(byHash.get(HASH), 'https://x.invalid/resolve', {
+    debridProvider: 'torbox',
+    torboxReady: true,
+    viaDebrid: true,
+  });
+  assert.notEqual(fromSearch.behaviorHints.indexer, 'Library TB', 'achado pela busca mantém o site como indexer');
 });
 
 test('sem token TorBox a conta não é consultada', async (t) => {
