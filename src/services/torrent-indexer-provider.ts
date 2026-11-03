@@ -244,7 +244,9 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
   );
   private static readonly INDEXER_FAILURE_COOLDOWN_MS = parsePositiveInt(
     readEnv('TORRENT_INDEXER_FAILURE_COOLDOWN_MS', 'TORRENT_INDEXER_INDEXER_FAILURE_COOLDOWN_MS'),
-    900_000,
+    // igual ao healthRetryAfter do torrent-indexer: os dois cooldowns ficam em
+    // série, e um maior aqui escondia a volta que o servidor já liberou
+    300_000,
   );
   private static readonly indexerPerformance = new Map<string, IndexerPerformanceEntry>();
   private static readonly indexerFailureState = new Map<string, IndexerFailureState>();
@@ -1054,14 +1056,22 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     }
   }
 
-  /** Alimenta o histórico local (prioridade e cooldown) com o resultado de cada sub-chamada. */
+  /**
+   * Alimenta o histórico local (prioridade e cooldown) com o resultado de cada sub-chamada.
+   * Uma resposta do multi traz várias queries por indexer, mas conta como uma só
+   * observação de saúde: no máximo uma falha por indexer, e um "ok" em qualquer
+   * query vence as falhas da mesma resposta. Sem isso, um 502 passageiro nas 3
+   * queries de uma busca já fechava o limite de falhas seguidas.
+   */
   private recordMultiCalls(calls: MultiCall[], deadlineMs: number): void {
+    const okSlugs = new Set<string>();
+    const failedSlugs = new Set<string>();
     for (const call of calls) {
       if (typeof call.indexer !== 'string' || !call.indexer) continue;
       const slug = this.parser.normalizeIndexerSlug(call.indexer);
       const durationMs = typeof call.duration_ms === 'number' ? call.duration_ms : 0;
       if (call.state === 'ok') {
-        this.clearIndexerFailure(slug);
+        okSlugs.add(slug);
         // replay do cache não diz nada sobre a velocidade do site; SHARED pegou
         // carona numa execução já em andamento e só mostra parte do tempo
         if (call.cache !== 'HIT' && call.cache !== 'SHARED') {
@@ -1070,7 +1080,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
       } else if (call.state === 'error') {
         const status = call.status ?? 0;
         if (status >= 500 || status === 403 || status === 429) {
-          this.recordIndexerFailure(slug);
+          failedSlugs.add(slug);
         }
         this.recordIndexerPerformance(slug, durationMs, 0);
       } else if (call.state === 'timeout' && call.reason === 'not_started') {
@@ -1082,6 +1092,10 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
         // a Fase 3 não o tratar como rápido.
         this.recordIndexerPerformance(slug, Math.max(durationMs, deadlineMs), 0);
       }
+    }
+    for (const slug of okSlugs) this.clearIndexerFailure(slug);
+    for (const slug of failedSlugs) {
+      if (!okSlugs.has(slug)) this.recordIndexerFailure(slug);
     }
   }
 
