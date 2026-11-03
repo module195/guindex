@@ -103,13 +103,16 @@ export function setupRoutes() {
             realdebridToken: selection.realdebridToken,
             torboxToken: selection.torboxToken
           },
-          true
+          true,
+          ConfigService.requestOrigin(req.headers, req.protocol)
         )
       );
   });
 
-  fastify.get('/', async (_req, reply) => {
-    reply.type('text/html').send(configController.generateConfigHTML());
+  fastify.get('/', async (req, reply) => {
+    reply
+      .type('text/html')
+      .send(configController.generateConfigHTML(undefined, false, ConfigService.requestOrigin(req.headers, req.protocol)));
   });
 
   // ✅ Caso sem token
@@ -238,8 +241,19 @@ export function setupRoutes() {
     provider?: string,
     linkType?: string,
     ctx?: string,
-    userIp?: string
+    userIp?: string,
+    requestBaseUrl?: string
   ) => {
+    // Sem BASE_URL no env, o placeholder sai como http://localhost/...; o player
+    // não alcança esse endereço, então troca pela origem pública do pedido.
+    const redirectTo = (url: string) => {
+      const localBase = `${config.baseUrl}/`;
+      reply.redirect(
+        config.baseUrlIsFallback && requestBaseUrl && url.startsWith(localBase)
+          ? `${requestBaseUrl}/${url.slice(localBase.length)}`
+          : url
+      );
+    };
     try {
       const context = StreamService.decodeStreamContext(ctx);
       const debridProvider = StreamService.extractDebridProvider(
@@ -256,7 +270,7 @@ export function setupRoutes() {
           context,
           userIp
         });
-        reply.redirect(directUrl);
+        redirectTo(directUrl);
         return;
       }
 
@@ -272,7 +286,7 @@ export function setupRoutes() {
         context,
         userIp
       });
-      reply.redirect(directUrl);
+      redirectTo(directUrl);
     } catch (error) {
       if (error instanceof RealDebridBlockedError) {
         // 451: o RD recusou o arquivo por denúncia; outro play não vai funcionar
@@ -314,6 +328,7 @@ export function setupRoutes() {
         const linkType = (req.query as any)?.linkType as string | undefined;
         const originalUrl = (req.query as any)?.url as string | undefined;
         const userIp = publicClientIp(req.ip);
+        const requestBaseUrl = ConfigService.requestOrigin(req.headers, req.protocol);
 
         if (!token) {
           reply.status(400).send({ error: 'Debrid token is required' });
@@ -325,7 +340,7 @@ export function setupRoutes() {
             reply.status(400).send({ error: 'URL is required for TorBox WebDL' });
             return;
           }
-          await handleResolveRequest(reply, token, undefined, originalUrl, provider, linkType, ctx, userIp);
+          await handleResolveRequest(reply, token, undefined, originalUrl, provider, linkType, ctx, userIp, requestBaseUrl);
           console.info(`[GuIndex] 🔗 Resolve (${provider}/${linkType}) finalizado em ${Date.now() - started}ms`);
           return;
         }
@@ -335,7 +350,7 @@ export function setupRoutes() {
           return;
         }
 
-        await handleResolveRequest(reply, token, magnet, undefined, provider, linkType, ctx, userIp);
+        await handleResolveRequest(reply, token, magnet, undefined, provider, linkType, ctx, userIp, requestBaseUrl);
         console.info(`[GuIndex] 🔗 Resolve (${provider}/${linkType}) finalizado em ${Date.now() - started}ms`);
       }
     });

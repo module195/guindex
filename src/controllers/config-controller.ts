@@ -92,11 +92,14 @@ export class ConfigController {
 
   generateConfigHTML(
     config?: { realdebridToken?: string; torboxToken?: string; debridProvider?: string },
-    isConfigured: boolean = false
+    isConfigured: boolean = false,
+    requestBaseUrl?: string
   ): string {
     const buttonText = isConfigured ? 'Salvar' : 'Instalar Addon';
     const provider = config?.debridProvider ?? 'torbox';
-    const baseUrl = this.config.baseUrl;
+    // Sem BASE_URL no env, o padrão é localhost, que o navegador do usuário não
+    // alcança: vale a origem pública do pedido.
+    const baseUrl = this.config.baseUrlIsFallback && requestBaseUrl ? requestBaseUrl : this.config.baseUrl;
 
     return `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -454,7 +457,7 @@ export class ConfigController {
     }
   </style>
 </head>
-<body data-base-url="${baseUrl}">
+<body data-base-url="${escapeHtml(baseUrl)}">
   <div class="card">
     <div class="header">
       <div class="logo-wrap">
