@@ -14,6 +14,7 @@ import { ConfigService } from './config-service.js';
 import type { StreamContext } from '../models/source-model.js';
 import { TorboxClient, type TorboxFile, type TorboxTorrent, type TorboxWebDl } from './torbox-client.js';
 import { timedSleep } from './playback-timing.js';
+import { BoundedMap } from '../utils/bounded-map.js';
 
 type AvailabilityCacheEntry = { cached: boolean; expires: number };
 type AvailabilityInFlight = { answer: Promise<boolean | undefined>; startedAt: number };
@@ -69,7 +70,8 @@ export interface TorboxDirectResult {
 
 export class TorboxService {
   private static readonly INSTANT_AVAILABILITY_TTL_MS = 5 * 60 * 1000; // 5 min
-  private static availabilityCache = new Map<string, AvailabilityCacheEntry>();
+  /** Por hash; teto para não crescer sem limite (o TTL é conferido na leitura) */
+  private static availabilityCache = new BoundedMap<string, AvailabilityCacheEntry>(50_000);
   /** Consultas em andamento, por token + hash: a falha da chave de outro usuário não vale para a sua. */
   private static availabilityInFlight = new Map<string, AvailabilityInFlight>();
   /**
@@ -85,7 +87,7 @@ export class TorboxService {
    * evita um createtorrent a cada play.
    */
   private static readonly ACCOUNT_TORRENTS_TTL_MS = 2 * 60 * 1000;
-  private static accountTorrents = new Map<string, { torrents: Map<string, number>; expires: number }>();
+  private static accountTorrents = new BoundedMap<string, { torrents: Map<string, number>; expires: number }>(500);
   private static accountTorrentsInFlight = new Map<string, Promise<Map<string, number>>>();
 
   private client: TorboxClient;

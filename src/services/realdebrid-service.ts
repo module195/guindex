@@ -17,6 +17,7 @@ import { ConfigService } from './config-service.js';
 import { timeStep, timedSleep } from './playback-timing.js';
 import type { TorrentInfo, MagnetResponse, UnrestrictResponse } from '../models/realdebrid-model.js';
 import type { StreamContext } from '../models/source-model.js';
+import { BoundedMap } from '../utils/bounded-map.js';
 
 interface AccountTorrent {
   id?: string;
@@ -93,7 +94,7 @@ export class RealDebridService {
   private static readonly ACCOUNT_HASHES_TTL_MS = 2 * 60 * 1000;
   private static readonly ACCOUNT_TORRENTS_LIMIT = 2500;
   /** Chave = token, para a lista de um usuário nunca vazar para outro */
-  private static accountHashesCache = new Map<string, AccountHashesCacheEntry>();
+  private static accountHashesCache = new BoundedMap<string, AccountHashesCacheEntry>(500);
   private static accountHashesInFlight = new Map<string, Promise<Map<string, string> | undefined>>();
   /** Após 401/403 em /torrents, pausa novas chamadas por este período */
   private static readonly ACCOUNT_TORRENTS_DISABLE_MS = (() => {

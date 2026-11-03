@@ -47,9 +47,14 @@ import {
   STRONG_EPISODE_REGEX,
   logReq,
 } from './torrent-indexer-shared.js';
+import { BoundedMap } from '../utils/bounded-map.js';
 
 export { logReq } from './torrent-indexer-shared.js';
 const BACKGROUND_WARM_DELAY_MS = 2000;
+// Tetos dos caches em memória (antes cresciam sem limite durante a vida do processo)
+const CINEMETA_CACHE_MAX_ENTRIES = 2000;
+const SEARCH_CACHE_MAX_ENTRIES = 1000;
+const LOCALIZED_TITLE_CACHE_MAX_ENTRIES = 5000;
 
 class GlobalIndexerQueue {
   private queue: Array<() => Promise<void>> = [];
@@ -126,10 +131,10 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
   }
 
   /** In-memory Cinemeta cache (shared across instances) */
-  private static cinemetaCache = new Map<string, { data: CinemetaMeta; ts: number }>();
+  private static cinemetaCache = new BoundedMap<string, { data: CinemetaMeta; ts: number }>(CINEMETA_CACHE_MAX_ENTRIES);
   private static readonly CINEMETA_TTL = 5 * 60 * 1000; // 5 min
-  private static searchCache = new Map<string, SearchCacheEntry>();
-  private static localizedTitleCache = new Map<string, LocalizedTitleCacheEntry>();
+  private static searchCache = new BoundedMap<string, SearchCacheEntry>(SEARCH_CACHE_MAX_ENTRIES);
+  private static localizedTitleCache = new BoundedMap<string, LocalizedTitleCacheEntry>(LOCALIZED_TITLE_CACHE_MAX_ENTRIES);
   private static indexerNamesCache:
     | { ts: number; names: string[] }
     | undefined;
