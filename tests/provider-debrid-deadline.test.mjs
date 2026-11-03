@@ -74,6 +74,8 @@ function startServer() {
 
 function newProvider(base) {
   TorrentIndexerProvider.indexerCatalogCache = undefined;
+  TorrentIndexerProvider.indexerCatalogInFlight = undefined;
+  TorrentIndexerProvider.indexerCatalogFailedAt = 0;
   TorrentIndexerProvider.indexerNamesCache = undefined;
   TorrentIndexerProvider.searchCache.clear();
   TorrentIndexerProvider.cinemetaCache.set(`movie:${IMDB}`, { data: { name: 'Matrix', year: 1999 }, ts: Date.now() });

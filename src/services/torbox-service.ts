@@ -11,6 +11,7 @@
  */
 
 import { ConfigService } from './config-service.js';
+import { magnetHexHash } from '../utils/btih.js';
 import type { StreamContext } from '../models/source-model.js';
 import { TorboxClient, type TorboxFile, type TorboxTorrent, type TorboxWebDl } from './torbox-client.js';
 import { timedSleep } from './playback-timing.js';
@@ -359,7 +360,7 @@ export class TorboxService {
 
   /** Usa o torrent que já está na conta com o mesmo hash; senão cria um novo. */
   private async findOrCreateTorrent(magnet: string): Promise<number> {
-    const hash = magnet.match(/xt=urn:btih:([a-f0-9]{40})/i)?.[1]?.toLowerCase();
+    const hash = magnetHexHash(magnet);
     if (hash) {
       const existing = await this.getAccountTorrents()
         .then((torrents) => torrents.get(hash))

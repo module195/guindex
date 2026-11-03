@@ -19,6 +19,7 @@ import type { TorrentInfo, MagnetResponse, UnrestrictResponse } from '../models/
 import type { StreamContext } from '../models/source-model.js';
 import { BoundedMap } from '../utils/bounded-map.js';
 import { debridApiToken } from './access-key.js';
+import { magnetHexHash } from '../utils/btih.js';
 import { selectBestFile } from './file-selection.js';
 
 interface AccountTorrent {
@@ -72,9 +73,9 @@ function realDebridError(prefix: string, statusCode: number, body: string): Erro
   return new Error(message);
 }
 
-/** Extrai o btih (hex, minúsculo) de um magnet. */
+/** Extrai o btih (hex, minúsculo) de um magnet; base32 é convertido. */
 function magnetHash(magnet: string): string | undefined {
-  return magnet.match(/xt=urn:btih:([a-f0-9]{40})/i)?.[1]?.toLowerCase();
+  return magnetHexHash(magnet);
 }
 
 export class RealDebridService {

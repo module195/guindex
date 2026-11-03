@@ -167,6 +167,10 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     | undefined;
   /** Capacidades e saúde dos indexers, lidas de /sources?v=2 */
   private static indexerCatalogCache: IndexerCatalog | undefined;
+  /** Consulta ao /sources em andamento: pedidos simultâneos esperam a mesma. */
+  private static indexerCatalogInFlight: Promise<IndexerCatalog | undefined> | undefined;
+  /** Última falha do /sources: até CATALOG_RETRY_MS depois dela, não tenta de novo. */
+  private static indexerCatalogFailedAt = 0;
   private static readonly SEARCH_CACHE_TTL_MS = parsePositiveInt(
     process.env.TORRENT_INDEXER_SEARCH_CACHE_TTL_MS,
     120_000,
@@ -177,6 +181,12 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     process.env.TORRENT_INDEXER_INDEXERS_CACHE_TTL_MS,
     120_000,
   );
+  // O /sources fica no caminho do multi: timeout curto, dentro do orçamento.
+  private static readonly CATALOG_TIMEOUT_MS = parsePositiveInt(
+    process.env.TORRENT_INDEXER_SOURCES_TIMEOUT_MS,
+    1500,
+  );
+  private static readonly CATALOG_RETRY_MS = 10_000;
   private static readonly LOCALIZED_TITLE_CACHE_TTL_MS = parsePositiveInt(
     process.env.TORRENT_INDEXER_LOCALIZED_TITLE_CACHE_TTL_MS,
     7 * 24 * 60 * 60 * 1000,
@@ -528,10 +538,14 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     if (!TorrentIndexerProvider.ENABLE_FALLBACK_INDEXER_SEARCH || queries.length === 0) return undefined;
     const startedAt = Date.now();
     const topQueries = queries.slice(0, 3);
-    const indexers = (await this.fetchIndexerNames(false))
-      .filter((name) => topQueries.some((q) => this.indexerSupportsQuery(name, q)));
-    if (indexers.length === 0) return undefined;
-    if (TorrentIndexerProvider.indexerCatalogCache?.multi === false) return undefined;
+    const catalog = await this.fetchIndexerCatalog();
+    if (catalog?.multi === false) return undefined;
+    // Sem catálogo (/sources fora do ar), o multi vai sem a lista: o servidor
+    // usa os indexers ativos dele. Antes, a busca ao vivo nem saía.
+    const indexers = catalog
+      ? (await this.fetchIndexerNames(false)).filter((name) => topQueries.some((q) => this.indexerSupportsQuery(name, q)))
+      : [];
+    if (catalog && indexers.length === 0) return undefined;
     const remaining = budgetMs - (Date.now() - startedAt);
     if (remaining <= 0) return undefined;
     return this.fetchMultiIndexerSearch(topQueries, indexers, remaining, context);
@@ -831,40 +845,72 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
    * v=2 e responde só indexer_names: aí as capacidades ficam desconhecidas e
    * o /indexers/multi não é usado. Em erro, devolve o último catálogo lido.
    */
+  /**
+   * Catálogo do /sources?v=2. Vencido, sai o antigo na hora e a atualização
+   * corre em segundo plano; sem nenhum, espera uma consulta só, compartilhada
+   * pelos pedidos simultâneos. Depois de uma falha, fica CATALOG_RETRY_MS sem
+   * tentar de novo, para um torrent-indexer fora do ar não custar um timeout
+   * a cada pedido.
+   */
   private async fetchIndexerCatalog(): Promise<IndexerCatalog | undefined> {
     const cached = TorrentIndexerProvider.indexerCatalogCache;
-    if (
-      cached &&
-      Date.now() - cached.ts < TorrentIndexerProvider.INDEXER_NAMES_CACHE_TTL_MS &&
-      cached.indexers.length > 0
-    ) {
+    const now = Date.now();
+    if (cached && cached.indexers.length > 0) {
+      if (now - cached.ts >= TorrentIndexerProvider.INDEXER_NAMES_CACHE_TTL_MS) {
+        void this.refreshIndexerCatalog();
+      }
       return cached;
     }
+    return this.refreshIndexerCatalog();
+  }
 
+  private refreshIndexerCatalog(): Promise<IndexerCatalog | undefined> {
+    const inFlight = TorrentIndexerProvider.indexerCatalogInFlight;
+    if (inFlight) return inFlight;
+    const cached = TorrentIndexerProvider.indexerCatalogCache;
+    if (Date.now() - TorrentIndexerProvider.indexerCatalogFailedAt < TorrentIndexerProvider.CATALOG_RETRY_MS) {
+      return Promise.resolve(cached);
+    }
+    const pending = this.requestIndexerCatalog()
+      .then((catalog) => {
+        if (!catalog) {
+          TorrentIndexerProvider.indexerCatalogFailedAt = Date.now();
+          return TorrentIndexerProvider.indexerCatalogCache;
+        }
+        TorrentIndexerProvider.indexerCatalogFailedAt = 0;
+        TorrentIndexerProvider.indexerCatalogCache = catalog;
+        // getDomainToIndexerMap usa os nomes para reconhecer o indexer pelo domínio
+        TorrentIndexerProvider.indexerNamesCache = {
+          ts: catalog.ts,
+          names: catalog.indexers.map((c) => c.name),
+        };
+        return catalog;
+      })
+      .finally(() => {
+        TorrentIndexerProvider.indexerCatalogInFlight = undefined;
+      });
+    TorrentIndexerProvider.indexerCatalogInFlight = pending;
+    return pending;
+  }
+
+  /** Uma consulta ao /sources?v=2; undefined em erro, timeout ou catálogo vazio. */
+  private async requestIndexerCatalog(): Promise<IndexerCatalog | undefined> {
     try {
       const response = await request(`${this.baseUrl}/sources?v=2`, {
-        signal: AbortSignal.timeout(7000),
+        signal: AbortSignal.timeout(TorrentIndexerProvider.CATALOG_TIMEOUT_MS),
         headers: { Accept: 'application/json' },
       });
       if (response.statusCode >= 400) {
         await response.body.dump().catch(() => undefined);
-        return cached;
+        console.warn(`[GuIndex] ⚠️ /sources?v=2 respondeu HTTP ${response.statusCode}`);
+        return undefined;
       }
-
       const payload = (await response.body.json()) as Record<string, unknown>;
       const catalog = this.parser.parseIndexerCatalog(payload);
-      if (!catalog || catalog.indexers.length === 0) {
-        return cached;
-      }
-      TorrentIndexerProvider.indexerCatalogCache = catalog;
-      // getDomainToIndexerMap usa os nomes para reconhecer o indexer pelo domínio
-      TorrentIndexerProvider.indexerNamesCache = {
-        ts: catalog.ts,
-        names: catalog.indexers.map((c) => c.name),
-      };
-      return catalog;
-    } catch {
-      return cached;
+      return catalog && catalog.indexers.length > 0 ? catalog : undefined;
+    } catch (error) {
+      console.warn(`[GuIndex] ⚠️ /sources?v=2 falhou: ${error instanceof Error ? error.message : String(error)}`);
+      return undefined;
     }
   }
 
@@ -956,10 +1002,10 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     for (const q of queries) {
       url.searchParams.append('q', q);
     }
-    url.searchParams.set('indexers', indexers.join(','));
+    if (indexers.length > 0) url.searchParams.set('indexers', indexers.join(','));
     url.searchParams.set('deadline_ms', String(deadlineMs));
 
-    logReq(context, `📡 Multi-Search: [${queries.join(', ')}] em [${indexers.join(',')}] (deadline_ms: ${deadlineMs})`);
+    logReq(context, `📡 Multi-Search: [${queries.join(', ')}] em [${indexers.length > 0 ? indexers.join(',') : 'todos os ativos'}] (deadline_ms: ${deadlineMs})`);
 
     try {
       const response = await request(url.toString(), {

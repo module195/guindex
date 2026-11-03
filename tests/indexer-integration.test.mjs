@@ -58,6 +58,8 @@ function startServer(routes) {
 
 beforeEach(() => {
   TorrentIndexerProvider.indexerCatalogCache = undefined;
+  TorrentIndexerProvider.indexerCatalogInFlight = undefined;
+  TorrentIndexerProvider.indexerCatalogFailedAt = 0;
   TorrentIndexerProvider.indexerNamesCache = undefined;
   TorrentIndexerProvider.indexerPerformance.clear();
   TorrentIndexerProvider.indexerFailureState.clear();
