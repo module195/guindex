@@ -109,7 +109,8 @@ Stremio/AIOStreams
 5. **Filtro de relevancia** — `isRelevantTorrent()` descarta resultados com titulo errado, temporada/episodio divergente, ou ano incompativel
 6. **Ranking** — Ordena por qualidade (1080p > 720p), idioma (Dual > PT > EN), e seeds
 7. **Debrid check** — Verifica cache no TorBox/RD para indicar ⚡ ou ⏳. A consulta comeca com o que o cache (Fase 1) ja trouxe, enquanto o multi roda, e com os streams de cada fonte assim que ela responde; o `/stream` espera por ela ate o fim do orcamento (menos 0,2 s para montar a resposta; `TORRENT_INDEXER_DEBRID_MAX_WAIT_MS` limita essa espera). Cada hash vale assim que o TorBox responde: um hash lento nao tira o selo dos outros. Os que nao responderem a tempo (ou cuja consulta falhou) saem como nao cacheados; a consulta termina em segundo plano (`TORBOX_CHECKCACHED_TIMEOUT_MS`) e fica no cache de disponibilidade. Essa resposta nao fica guardada como definitiva: quando a consulta termina, a resposta guardada e remontada com as respostas, e um pedido antes disso a recebe remontada com o que ja chegou. Com o Real-Debrid, a lista da conta ja em memoria vale na hora. Se o multi terminar com streams novos enquanto o `/stream` ainda espera o debrid, e a busca nao os tiver, essa resposta nao fica no cache e o proximo pedido busca de novo; o que o cache ja tinha e os tetos por fonte cortaram nao conta como novo. Enquanto o multi do titulo nao termina, a resposta sai com `Cache-Control: no-store`, porque o cache do cliente nao recebe o descarte
-8. **Resposta** — Retorna `SourceStream[]` formatados com titulo, qualidade, idioma e badges
+8. **Biblioteca TorBox** — Com token TorBox, a lista da conta (`/v1/api/torrents/mylist`, cache de 2 min por token) sai junto com a busca. Torrent ja baixado na conta que passa no mesmo filtro de relevancia vira stream ⚡ com a linha "🗃️ Ja esta na sua TorBox", mesmo que nenhum indexer o tenha achado; o que a busca ja trouxe e esta na conta ganha o selo sem gastar checkcached. O play reaproveita o torrent da conta (sem `createtorrent`). Depois da busca, a espera pela lista e de no maximo `GUINDEX_TORBOX_LIBRARY_WAIT_MS`; sem resposta, ela fica para o proximo pedido
+9. **Resposta** — Retorna `SourceStream[]` formatados com titulo, qualidade, idioma e badges
 
 ### Mapa de indexers
 
@@ -426,6 +427,8 @@ npm start
 | `TORBOX_WAIT_VIDEO_URL` | — | Video de espera enquanto TorBox processa |
 | `TORBOX_STREAM_LIMIT` | `15` | Limite de streams TorBox (o melhor de cada qualidade sempre entra) |
 | `TORBOX_CHECKCACHED_TIMEOUT_MS` | `15000` | Timeout da consulta de cache no TorBox. O `/stream` espera por ela so ate o fim do orcamento; o resto roda em segundo plano e enche o cache de disponibilidade. Consulta sem resposta em 3 s abre outra ao lado, so com os hashes ainda sem resposta, e vale a primeira resposta, para todos que esperam por ela |
+| `GUINDEX_TORBOX_LIBRARY` | `true` | Itens da conta TorBox casados com o titulo entram no `/stream` (biblioteca) |
+| `GUINDEX_TORBOX_LIBRARY_WAIT_MS` | `750` | Espera maxima pela lista da conta TorBox depois que a busca termina (sempre dentro do orcamento) |
 | `ALLOW_ENV_DEBRID_TOKEN` | `false` | Com `true`, pedidos sem token na URL usam `TORBOX_TOKEN`/`REALDEBRID_TOKEN` do env. So para instancia privada: os links `/resolve` levam esse token, entao qualquer um que acesse `/stream` passa a usar a conta do dono |
 | `TORBOX_TOKEN` / `REALDEBRID_TOKEN` | — | Token do dono, lido so com `ALLOW_ENV_DEBRID_TOKEN=true` |
 

@@ -50,9 +50,19 @@ const CHECK_CACHED_TIMEOUT_MS = (() => {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 15_000;
 })();
 
+/** Lista da conta: hash minúsculo → id (para reaproveitar no play) e os itens crus (biblioteca). */
+interface AccountSnapshot {
+  torrents: Map<string, number>;
+  items: TorboxTorrent[];
+  expires: number;
+}
 
-
-
+/** Torrent da conta que já pode tocar: baixado (ou servido do cache do TorBox). */
+function isLibraryReady(torrent: TorboxTorrent): boolean {
+  if (!torrent.name) return false;
+  if (torrent.download_finished === true || torrent.download_present === true) return true;
+  return torrent.download_state === 'cached' || torrent.download_state === 'completed';
+}
 
 export interface TorboxDirectResult {
   url: string;
@@ -80,8 +90,8 @@ export class TorboxService {
    * evita um createtorrent a cada play.
    */
   private static readonly ACCOUNT_TORRENTS_TTL_MS = 2 * 60 * 1000;
-  private static accountTorrents = new BoundedMap<string, { torrents: Map<string, number>; expires: number }>(500);
-  private static accountTorrentsInFlight = new Map<string, Promise<Map<string, number>>>();
+  private static accountTorrents = new BoundedMap<string, AccountSnapshot>(500);
+  private static accountTorrentsInFlight = new Map<string, Promise<AccountSnapshot>>();
 
   private client: TorboxClient;
   private waitVideoUrl?: string;
@@ -371,35 +381,52 @@ export class TorboxService {
   }
 
   private async getAccountTorrents(): Promise<Map<string, number>> {
-    const cached = TorboxService.accountTorrents.get(this.token);
+    return (await TorboxService.loadAccount(this.token)).torrents;
+  }
+
+  /**
+   * Torrents já baixados na conta (a "biblioteca"), da mesma lista e do mesmo
+   * cache que o play usa para reaproveitar torrents.
+   */
+  static async accountLibrary(token: string): Promise<TorboxTorrent[]> {
+    const { items } = await this.loadAccount(token);
+    return items.filter(isLibraryReady);
+  }
+
+  /** Lista da conta por token, com cache curto e uma consulta por vez. */
+  private static loadAccount(token: string): Promise<AccountSnapshot> {
+    const cached = this.accountTorrents.get(token);
     if (cached && cached.expires > Date.now()) {
-      return cached.torrents;
+      return Promise.resolve(cached);
     }
-    const inFlight = TorboxService.accountTorrentsInFlight.get(this.token);
+    const inFlight = this.accountTorrentsInFlight.get(token);
     if (inFlight) {
       return inFlight;
     }
-    const pending = this.client
+    const pending = new TorboxClient({ token })
       .listTorrents()
       .then((list) => {
         const torrents = new Map<string, number>();
+        const items: TorboxTorrent[] = [];
         for (const torrent of list) {
           if (torrent?.hash && typeof torrent.id === 'number') {
             torrents.set(torrent.hash.toLowerCase(), torrent.id);
+            items.push(torrent);
           }
         }
-        TorboxService.accountTorrents.set(this.token, {
+        const snapshot: AccountSnapshot = {
           torrents,
+          items,
           expires: Date.now() + TorboxService.ACCOUNT_TORRENTS_TTL_MS
-        });
-        return torrents;
+        };
+        this.accountTorrents.set(token, snapshot);
+        return snapshot;
       })
-      .finally(() => TorboxService.accountTorrentsInFlight.delete(this.token));
-    TorboxService.accountTorrentsInFlight.set(this.token, pending);
+      .finally(() => this.accountTorrentsInFlight.delete(token));
+    this.accountTorrentsInFlight.set(token, pending);
     return pending;
   }
 
-  // ---------- WebDL flow ----------
   async processWebDlToDirectUrl(url: string, context?: StreamContext): Promise<TorboxDirectResult> {
     try {
       const name = context?.title || context?.episodeTitle;

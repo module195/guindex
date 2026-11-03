@@ -48,6 +48,8 @@ import {
 } from './torrent-indexer-shared.js';
 import { BoundedMap } from '../utils/bounded-map.js';
 import { selectBestFile } from './file-selection.js';
+import { TorboxService } from './torbox-service.js';
+import type { TorboxTorrent } from './torbox-client.js';
 
 export { logReq } from './torrent-indexer-shared.js';
 const BACKGROUND_WARM_DELAY_MS = 2000;
@@ -117,6 +119,31 @@ class GlobalIndexerQueue {
 }
 
 const globalQueue = new GlobalIndexerQueue();
+/** Biblioteca TorBox no /stream (itens da conta casados com o título). */
+const LIBRARY_ENABLED = parseBoolean(readEnv('GUINDEX_TORBOX_LIBRARY'), true);
+/** Espera máxima pela lista da conta depois que a busca termina */
+const LIBRARY_WAIT_MS = parseNonNegativeInt(readEnv('GUINDEX_TORBOX_LIBRARY_WAIT_MS'), 750);
+/** Teto de streams novos vindos só da conta, por pedido */
+const MAX_LIBRARY_STREAMS = 20;
+
+/** Torrent da conta TorBox no formato de resultado do torrent-indexer. */
+export function accountTorrentToTorrentLike(item: TorboxTorrent): TorrentLike {
+  const hash = item.hash.toLowerCase();
+  const name = item.name ?? hash;
+  return {
+    title: name,
+    info_hash: hash,
+    magnet_link: `magnet:?xt=urn:btih:${hash}&dn=${encodeURIComponent(name)}`,
+    size: item.size,
+    files: (item.files ?? []).map((file) => ({
+      path: file.name ?? file.short_name ?? '',
+      size: file.size,
+    })),
+    indexer: 'torbox',
+    indexerName: 'TorBox',
+  };
+}
+
 export class TorrentIndexerProvider extends BaseSourceProvider {
   private readonly baseUrl: string;
   private readonly parser = new TorrentParser();
@@ -310,6 +337,9 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
 
     if (queries.length === 0) return [];
 
+    // Biblioteca TorBox: a lista da conta sai já, em paralelo com a busca
+    const libraryPromise = this.startAccountLibrary(options);
+
     const reqId = Math.random().toString(36).substring(2, 8).toUpperCase();
     const context: MatchContext = {
       parsed,
@@ -411,6 +441,19 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
         .slice(0, Math.min(WARM_EXTRA_QUERIES, MAX_TEXT_QUERIES));
       if (remainingQueries.length > 0) {
         this.warmRemainingQueriesInBackground(remainingQueries, context);
+      }
+    }
+
+    if (libraryPromise) {
+      // A lista saiu junto com a busca; terminada a busca, espera por ela só uma
+      // janela curta (dentro do prazo). Sem resposta, ela termina em segundo plano
+      // e fica no cache da conta para o próximo pedido.
+      const libraryWaitMs = Math.min(LIBRARY_WAIT_MS, Math.max(0, remainingMs()));
+      const libraryItems = await this.awaitWithin(libraryPromise, libraryWaitMs, undefined);
+      if (libraryItems === undefined) {
+        logReq(context, `🗃️ Biblioteca TorBox sem resposta no prazo; fica para o próximo pedido`);
+      } else {
+        streams.push(...this.mergeAccountLibrary(libraryItems, streams, fallbackTitle, context, seen, sourceCounts));
       }
     }
 
@@ -587,6 +630,70 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     }
 
     return streams;
+  }
+
+  /** Lista da conta TorBox quando o pedido tem token TorBox e a biblioteca está ligada. */
+  private startAccountLibrary(options?: SourceFetchOptions): Promise<TorboxTorrent[]> | undefined {
+    if (!LIBRARY_ENABLED || options?.debridProvider !== 'torbox' || !options.torboxToken) return undefined;
+    return TorboxService.accountLibrary(options.torboxToken).catch((error) => {
+      console.warn(
+        `[TorrentIndexer] 🗃️ Falha ao listar a biblioteca TorBox: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return [];
+    });
+  }
+
+  /**
+   * Junta a biblioteca TorBox aos streams da busca. Hash que a busca já trouxe
+   * ganha o selo de cacheado e "na conta"; torrent da conta que casa com o título
+   * e a busca não achou vira stream novo, pelo mesmo filtro e montagem dos
+   * resultados do indexer. O play reaproveita o torrent da conta (sem createtorrent).
+   */
+  private mergeAccountLibrary(
+    items: TorboxTorrent[],
+    streams: SourceStream[],
+    fallbackTitle: string,
+    context: MatchContext,
+    seen: Set<string>,
+    sourceCounts: Map<string, number>,
+  ): SourceStream[] {
+    if (items.length === 0) return [];
+    const libraryHashes = new Set(items.map((item) => item.hash.toLowerCase()));
+    const foundHashes = new Set<string>();
+    let marked = 0;
+    for (const stream of streams) {
+      const hash = stream.infoHash?.toLowerCase();
+      if (!hash) continue;
+      foundHashes.add(hash);
+      if (libraryHashes.has(hash)) {
+        stream.cached = true;
+        stream.inLibrary = true;
+        marked++;
+      }
+    }
+
+    const candidates = items
+      .filter((item) => !foundHashes.has(item.hash.toLowerCase()))
+      .map((item) => accountTorrentToTorrentLike(item));
+    const added = this.collectStreamsFromTorrents(
+      candidates,
+      fallbackTitle,
+      context,
+      seen,
+      sourceCounts,
+      MAX_LIBRARY_STREAMS,
+    );
+    for (const stream of added) {
+      stream.cached = true;
+      stream.inLibrary = true;
+    }
+    if (marked > 0 || added.length > 0) {
+      logReq(
+        context,
+        `🗃️ Biblioteca TorBox: ${items.length} itens na conta; ${marked} já vindos da busca, ${added.length} novos`,
+      );
+    }
+    return added;
   }
 
   private hasSufficientResults(results: TorrentLike[], query: string, context: MatchContext): boolean {
