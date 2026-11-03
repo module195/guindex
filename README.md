@@ -407,6 +407,7 @@ npm start
 | `TORRENT_INDEXER_SEARCH_CACHE_TTL_MS` | `120000` | TTL do cache de busca em memoria (2min) |
 | `TORRENT_INDEXER_INDEXERS_CACHE_TTL_MS` | `120000` | TTL do cache do `/sources?v=2` (indexers, capacidades e saude; 2min) |
 | `TORRENT_INDEXER_LOCALIZED_TITLE_CACHE_TTL_MS` | `604800000` | TTL do cache TMDB (7 dias) |
+| `TORRENT_INDEXER_LOCALIZED_TITLE_FAILURE_TTL_MS` | `300000` | TTL quando o TMDB falha (timeout, rede, HTTP fora de 2xx): 5 min |
 
 #### TMDB (resolucao de titulos PT-BR)
 
@@ -425,6 +426,8 @@ npm start
 | `TORBOX_WAIT_VIDEO_URL` | — | Video de espera enquanto TorBox processa |
 | `TORBOX_STREAM_LIMIT` | `15` | Limite de streams TorBox (o melhor de cada qualidade sempre entra) |
 | `TORBOX_CHECKCACHED_TIMEOUT_MS` | `15000` | Timeout da consulta de cache no TorBox. O `/stream` espera por ela so ate o fim do orcamento; o resto roda em segundo plano e enche o cache de disponibilidade. Consulta sem resposta em 3 s abre outra ao lado, so com os hashes ainda sem resposta, e vale a primeira resposta, para todos que esperam por ela |
+| `ALLOW_ENV_DEBRID_TOKEN` | `false` | Com `true`, pedidos sem token na URL usam `TORBOX_TOKEN`/`REALDEBRID_TOKEN` do env. So para instancia privada: os links `/resolve` levam esse token, entao qualquer um que acesse `/stream` passa a usar a conta do dono |
+| `TORBOX_TOKEN` / `REALDEBRID_TOKEN` | — | Token do dono, lido so com `ALLOW_ENV_DEBRID_TOKEN=true` |
 
 ### Perfil recomendado para VPS
 

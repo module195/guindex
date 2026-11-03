@@ -331,6 +331,19 @@ export class StreamController {
     return filtered;
   }
 
+  /**
+   * Tokens debrid do dono da instância, lidos do env. Só valem com
+   * ALLOW_ENV_DEBRID_TOKEN=true: sem isso, qualquer pedido anônimo a /stream
+   * receberia links /resolve com o token do dono embutido.
+   */
+  static envDebridTokens(): { realdebridToken?: string; torboxToken?: string } | undefined {
+    if (process.env.ALLOW_ENV_DEBRID_TOKEN?.trim().toLowerCase() !== 'true') return undefined;
+    return {
+      realdebridToken: process.env.REALDEBRID_TOKEN,
+      torboxToken: process.env.TORBOX_TOKEN
+    };
+  }
+
   private async computeStreams(args: StreamRequest): Promise<StreamResponse> {
     const { type, id, extra } = args;
     const requestStartedAt = Date.now();
@@ -343,10 +356,7 @@ export class StreamController {
         query: {},
         headers: {},
         extra,
-        env: {
-          realdebridToken: process.env.REALDEBRID_TOKEN,
-          torboxToken: process.env.TORBOX_TOKEN
-        }
+        env: StreamController.envDebridTokens()
       });
       const selectedProvider = debridSelection.provider;
       const selectedToken = debridSelection.token;

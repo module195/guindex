@@ -6,6 +6,7 @@ import { MockAgent, setGlobalDispatcher } from 'undici';
 
 process.env.STREMIO_ADDON_SOURCES = '[]';
 process.env.REALDEBRID_TOKEN = 'token-env';
+process.env.ALLOW_ENV_DEBRID_TOKEN = 'true';
 
 const mockAgent = new MockAgent();
 mockAgent.disableNetConnect();

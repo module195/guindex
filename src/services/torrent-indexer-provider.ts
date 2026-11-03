@@ -149,6 +149,12 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     process.env.TORRENT_INDEXER_LOCALIZED_TITLE_CACHE_TTL_MS,
     7 * 24 * 60 * 60 * 1000,
   );
+  // Falha do TMDB (timeout, rede, 429, 5xx) fica pouco tempo em cache: só o
+  // bastante para não martelar a API, sem perder os títulos PT-BR por dias.
+  private static readonly LOCALIZED_TITLE_FAILURE_TTL_MS = parsePositiveInt(
+    process.env.TORRENT_INDEXER_LOCALIZED_TITLE_FAILURE_TTL_MS,
+    5 * 60 * 1000,
+  );
   private static readonly TMDB_TIMEOUT_MS = parsePositiveInt(
     process.env.TORRENT_INDEXER_TMDB_TIMEOUT_MS,
     5000,
@@ -1235,7 +1241,10 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     }
 
     const cached = forceFresh ? undefined : TorrentIndexerProvider.localizedTitleCache.get(normalizedImdb);
-    if (cached && Date.now() - cached.ts < TorrentIndexerProvider.LOCALIZED_TITLE_CACHE_TTL_MS) {
+    const cachedTtl = cached?.failed
+      ? TorrentIndexerProvider.LOCALIZED_TITLE_FAILURE_TTL_MS
+      : TorrentIndexerProvider.LOCALIZED_TITLE_CACHE_TTL_MS;
+    if (cached && Date.now() - cached.ts < cachedTtl) {
       return cached.titles;
     }
 
@@ -1268,9 +1277,10 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
         headers,
       });
 
-      if (response.statusCode >= 400) {
+      if (response.statusCode < 200 || response.statusCode >= 300) {
         await response.body.dump().catch(() => undefined);
-        TorrentIndexerProvider.localizedTitleCache.set(normalizedImdb, { ts: Date.now(), titles: [] });
+        console.warn(`[GuIndex] TMDB respondeu HTTP ${response.statusCode} para ${normalizedImdb}; sem títulos PT-BR por ora.`);
+        this.cacheLocalizedTitleFailure(normalizedImdb, forceFresh);
         return [];
       }
 
@@ -1295,8 +1305,11 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
           }
         }
       }
-    } catch {
-      // Ignore TMDB failures and continue with Cinemeta-only titles.
+    } catch (error) {
+      // Segue só com os títulos do Cinemeta; tenta o TMDB de novo depois do TTL curto.
+      console.warn(`[GuIndex] Falha ao consultar o TMDB para ${normalizedImdb}:`, (error as Error)?.message ?? error);
+      this.cacheLocalizedTitleFailure(normalizedImdb, forceFresh);
+      return [];
     }
 
     const result = Array.from(titles);
@@ -1304,6 +1317,11 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
       TorrentIndexerProvider.localizedTitleCache.set(normalizedImdb, { ts: Date.now(), titles: result });
     }
     return result;
+  }
+
+  private cacheLocalizedTitleFailure(imdbId: string, forceFresh: boolean): void {
+    if (forceFresh) return;
+    TorrentIndexerProvider.localizedTitleCache.set(imdbId, { ts: Date.now(), titles: [], failed: true });
   }
 
   private mapTorrentToStream(
