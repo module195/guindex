@@ -95,7 +95,7 @@ Stremio/AIOStreams
 ### Pipeline de busca em detalhe
 
 1. **Parse do ID** — Extrai `imdbId`, `season`, `episode` do ID Stremio (ex: `tt1190634:4:1`)
-2. **Resolucao de metadados** — Consulta Cinemeta para titulo EN + TMDB para titulo PT-BR
+2. **Resolucao de metadados** — Consulta Cinemeta para titulo EN + TMDB para titulo PT-BR. A busca espera por eles so `TORRENT_INDEXER_META_BUDGET_MS` (1,5 s); se os titulos chegarem depois, ainda dentro do prazo, o filtro de relevancia e refeito sobre o que as fases ja trouxeram (sem isso, todo torrent sem IMDb era descartado)
 3. **Geracao de queries** — Monta ate 12 variantes de busca:
    - Titulo puro (mais universal, vem primeiro)
    - `{titulo} S{xx}E{yy}` (notacao padrao)
@@ -105,12 +105,14 @@ Stremio/AIOStreams
 4. **Busca em 3 fases**, dentro de `TORRENT_INDEXER_REQUEST_BUDGET_MS` (8 s desde a chegada do pedido, menos `TORRENT_INDEXER_DEBRID_MARGIN_MS` para o debrid):
    - **Fase 1 (cache)**: `/search` no Meilisearch, uma chamada por query em paralelo (o `/search` le so o primeiro `q`). Ao mesmo tempo dispara o `/indexers/multi`
    - **Fase 2 (multi)**: `/indexers/multi` com IMDb + titulo PT + titulo original. Com cache suficiente, espera so uma janela curta; com cache fraco, espera ate o prazo. Os resultados das duas fases sao juntados
-   - **Fase 3 (indexers mais rapidos)**: se nada veio, `/indexers/{nome}` nos indexers mais rapidos pelo historico, com as queries de texto que o multi nao cobriu (ou tambem as do multi, se ele nao respondeu)
+   - **Fase 3 (indexers mais rapidos)**: se nada veio, `/indexers/{nome}` nos indexers mais rapidos pelo historico, com as queries de texto que o multi nao cobriu (ou tambem as do multi, se ele nao respondeu). Com o cache vazio, a espera pelo multi para `TORRENT_INDEXER_PHASE3_MIN_MS` antes do prazo e a Fase 3 roda junto com o multi ainda aberto; o que ele trouxer ate o prazo entra na resposta
 5. **Filtro de relevancia** — `isRelevantTorrent()` descarta resultados com titulo errado, temporada/episodio divergente, ou ano incompativel
 6. **Ranking** — Ordena por qualidade (1080p > 720p), idioma (Dual > PT > EN), e seeds
 7. **Debrid check** — Verifica cache no TorBox/RD para indicar ⚡ ou ⏳. A consulta comeca com o que o cache (Fase 1) ja trouxe, enquanto o multi roda, e com os streams de cada fonte assim que ela responde; o `/stream` espera por ela ate o fim do orcamento (menos 0,2 s para montar a resposta; `TORRENT_INDEXER_DEBRID_MAX_WAIT_MS` limita essa espera). Cada hash vale assim que o TorBox responde: um hash lento nao tira o selo dos outros. Os que nao responderem a tempo (ou cuja consulta falhou) saem como nao cacheados; a consulta termina em segundo plano (`TORBOX_CHECKCACHED_TIMEOUT_MS`) e fica no cache de disponibilidade. Essa resposta nao fica guardada como definitiva: quando a consulta termina, a resposta guardada e remontada com as respostas, e um pedido antes disso a recebe remontada com o que ja chegou. Com o Real-Debrid, a lista da conta ja em memoria vale na hora. Se o multi terminar com streams novos enquanto o `/stream` ainda espera o debrid, e a busca nao os tiver, essa resposta nao fica no cache e o proximo pedido busca de novo; o que o cache ja tinha e os tetos por fonte cortaram nao conta como novo. Enquanto o multi do titulo nao termina, a resposta sai com `Cache-Control: no-store`, porque o cache do cliente nao recebe o descarte
 8. **Biblioteca TorBox** — Com token TorBox, a lista da conta (`/v1/api/torrents/mylist`, cache de 2 min por token) sai junto com a busca. Torrent ja baixado na conta que passa no mesmo filtro de relevancia vira stream ⚡ com a linha "🗃️ Ja esta na sua TorBox", mesmo que nenhum indexer o tenha achado; o que a busca ja trouxe e esta na conta ganha o selo sem gastar checkcached. O play reaproveita o torrent da conta (sem `createtorrent`). Depois da busca, a espera pela lista e de no maximo `GUINDEX_TORBOX_LIBRARY_WAIT_MS`; sem resposta, ela fica para o proximo pedido
 9. **Resposta** — Retorna `SourceStream[]` formatados com titulo, qualidade, idioma e badges
+
+No boot, o GuIndex avisa no log (`⚠️ Prazos:`) quando uma combinacao de prazos se anula: orcamento acima de 8500 ms (passa dos 9 s do AIOStreams no pior caso), `META_BUDGET`, `PHASE3_MIN` ou `MULTI_GRACE_NO_4K` cobrindo a janela da busca inteira, `MULTI_GRACE_MS` maior que `MULTI_GRACE_NO_4K_MS`, `DEBRID_MARGIN` abaixo de 300 ms, ou `SOURCE_TIMEOUT_MS`/`STREMIO_ADDON_TIMEOUT_MS` acima do orcamento. O comportamento nao muda.
 
 ### Mapa de indexers
 

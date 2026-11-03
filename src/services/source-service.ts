@@ -11,7 +11,7 @@ import { REQUEST_BUDGET_MS } from './torrent-indexer-shared.js';
 // Timeout por provedor (ms). Padrão: o orçamento do pedido
 // (TORRENT_INDEXER_REQUEST_BUDGET_MS), para uma fonte lenta não segurar as
 // outras no Promise.all. 0 = sem timeout.
-const SOURCE_TIMEOUT_MS = (() => {
+export const SOURCE_TIMEOUT_MS = (() => {
   const parsed = Number.parseInt(process.env.SOURCE_TIMEOUT_MS ?? '', 10);
   if (Number.isFinite(parsed) && parsed >= 0) return parsed;
   return REQUEST_BUDGET_MS;
