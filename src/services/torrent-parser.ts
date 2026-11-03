@@ -15,7 +15,6 @@ import type {
   MatchContext,
 } from './torrent-indexer-shared.js';
 import {
-  MAX_DYNAMIC_QUERIES,
   MAX_TEXT_QUERIES,
   STRONG_EPISODE_REGEX,
   LANGUAGE_FLAG_MAP,
@@ -623,83 +622,6 @@ export class TorrentParser {
     add(enVariant);
 
     return out;
-  }
-
-  collectDynamicQueryCandidates(
-    type: string,
-    parsed: ParsedIdInfo,
-    torrents: TorrentLike[],
-    releaseYear?: number,
-    episodeTitle?: string,
-  ): string[] {
-    const out: string[] = [];
-    const add = (value?: string) => {
-      if (!value) {
-        return;
-      }
-      const cleaned = this.sanitizeQuery(value);
-      if (!cleaned || cleaned.length < 3 || cleaned.length > 140) {
-        return;
-      }
-      if (!out.includes(cleaned)) {
-        out.push(cleaned);
-      }
-    };
-
-    const topTorrents = torrents.slice(0, 40);
-    const titles: string[] = [];
-
-    for (const torrent of topTorrents) {
-      const collected = this.collectTorrentTitles(torrent);
-      for (const title of collected) {
-        if (/(1080p|720p|2160p|4k|x264|h264|x265|hevc|bluray|web-dl|webrip|hdtv|camrip|dublado|legendado|dual\s*audio|remux)/i.test(title)) {
-          continue;
-        }
-
-        if (!titles.includes(title)) {
-          titles.push(title);
-        }
-      }
-      if (titles.length >= 18) {
-        break;
-      }
-    }
-
-    for (const rawTitle of titles.slice(0, 12)) {
-      const localized = this.buildLocaleTitleVariants(rawTitle).slice(0, 4);
-      for (const title of localized) {
-        add(title);
-        if (type.toLowerCase() === 'movie') {
-          if (releaseYear) {
-            add(`${title} ${releaseYear}`);
-          }
-          continue;
-        }
-
-        if (parsed.season !== undefined) {
-          const season = parsed.season;
-          const seasonPadded = String(season).padStart(2, '0');
-          add(`${title} temporada ${season}`);
-          add(`${title} season ${season}`);
-          add(`${title} S${seasonPadded}`);
-
-          if (parsed.episode !== undefined) {
-            const episode = parsed.episode;
-            const episodePadded = String(episode).padStart(2, '0');
-            add(`${title} temporada ${season} episodio ${episode}`);
-            add(`${title} season ${season} episode ${episode}`);
-            add(`${title} S${seasonPadded}E${episodePadded}`);
-            add(`${title} ${season}x${episodePadded}`);
-          }
-        }
-
-        if (episodeTitle) {
-          add(`${title} ${episodeTitle}`);
-        }
-      }
-    }
-
-    return out.slice(0, MAX_DYNAMIC_QUERIES);
   }
 
   isRelevantTorrent(torrent: TorrentLike, context: MatchContext): boolean {

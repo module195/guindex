@@ -373,14 +373,10 @@ npm start
 
 | Variavel | Padrao | Descricao |
 |----------|--------|-----------|
-| `TORRENT_INDEXER_MAX_QUERY_TIME_MS` | `18000` | Orcamento maximo de tempo total por busca de streams (ms) |
 | `TORRENT_INDEXER_FALLBACK_TIMEOUT_MS` | `12000` | Timeout por request individual ao indexer (ms) |
 | `TORRENT_INDEXER_FALLBACK_CONCURRENCY` | `5` | Quantos indexers consultar em paralelo |
 | `TORRENT_INDEXER_FALLBACK_MAX_INDEXERS` | `0` | Maximo de indexers (0 = todos ativos) |
 | `TORRENT_INDEXER_FALLBACK_PER_INDEXER_LIMIT` | `0` | Limite de resultados por indexer quando consultando `/indexers/{name}` (0 = sem limite). **OBS**: o endpoint `/indexers/all` não deve receber `limit`; o controle por-indexer é aplicado nas chamadas individuais do slow-path. |
-| `TORRENT_INDEXER_TARGET_STREAMS` | `12` | Quantidade alvo para encerrar cedo com diversidade |
-| `TORRENT_INDEXER_MAX_DYNAMIC_QUERIES` | `10` | Limite de queries dinamicas para melhorar recall |
-| `TORRENT_INDEXER_MAX_STREAMS_PER_SOURCE` | `50` | Maximo de streams por fonte (evita monopolio) |
 
 #### Torrent Indexer — busca hibrida (2 fases)
 
@@ -445,12 +441,6 @@ TORRENT_INDEXER_FALLBACK_MAX_INDEXERS=0
 TORRENT_INDEXER_FALLBACK_PER_INDEXER_LIMIT=0
 TORRENT_INDEXER_FALLBACK_CONCURRENCY=5
 TORRENT_INDEXER_FALLBACK_TIMEOUT_MS=12000
-TORRENT_INDEXER_MAX_QUERY_TIME_MS=18000
-
-# Resultados
-TORRENT_INDEXER_TARGET_STREAMS=12
-TORRENT_INDEXER_MAX_DYNAMIC_QUERIES=10
-TORRENT_INDEXER_MAX_STREAMS_PER_SOURCE=50
 
 # Busca hibrida (Meilisearch fast-path)
 TORRENT_INDEXER_HYBRID_MIN_RESULTS=2

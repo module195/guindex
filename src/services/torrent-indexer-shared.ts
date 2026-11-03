@@ -200,22 +200,6 @@ export const readEnv = (primary: string, legacy?: string): string | undefined =>
 };
 
 export const MAX_STREAMS = 240;
-export const TARGET_STREAMS_PER_REQUEST = parsePositiveInt(
-  process.env.TORRENT_INDEXER_TARGET_STREAMS,
-  30,
-);
-export const MAX_DYNAMIC_QUERIES = parsePositiveInt(
-  process.env.TORRENT_INDEXER_MAX_DYNAMIC_QUERIES,
-  10,
-);
-export const MAX_SEARCH_TIME_MS = parsePositiveInt(
-  process.env.TORRENT_INDEXER_MAX_QUERY_TIME_MS,
-  18_000,
-);
-export const MAX_STREAMS_PER_SOURCE = parsePositiveInt(
-  process.env.TORRENT_INDEXER_MAX_STREAMS_PER_SOURCE,
-  50,
-);
 export const MAX_TEXT_QUERIES = 12;
 export const MAX_COLLECT_PER_SOURCE = parsePositiveInt(
   process.env.TORRENT_INDEXER_COLLECT_PER_SOURCE,
