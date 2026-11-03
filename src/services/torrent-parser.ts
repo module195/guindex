@@ -639,21 +639,31 @@ export class TorrentParser {
         const normalizedTargets = targetTitles
           .map((title) => this.normalizeForComparison(title))
           .filter((title) => title.length >= 3);
+        // Títulos curtos ("Up", "It", "Us") não entram na comparação por
+        // substring (casariam com "Superman"): só valem como primeira palavra.
+        const shortTargets = targetTitles
+          .map((title) => this.normalizeWords(title))
+          .filter((title) => title.length > 0 && title.length < 3 && /[a-z]/.test(title));
         const normalizedAlphabeticTargets = normalizedTargets.filter((title) => /[a-z]/.test(title));
         const effectiveTargets =
           normalizedAlphabeticTargets.length > 0 ? normalizedAlphabeticTargets : normalizedTargets;
 
-        if (effectiveTargets.length === 0) {
+        if (effectiveTargets.length === 0 && shortTargets.length === 0) {
           return false;
         }
 
         const normalizedTorrentTitles = torrentTitles.map((title) => this.normalizeForComparison(title));
 
-        const matchesTitle = normalizedTorrentTitles.some((torrentTitle) =>
-          effectiveTargets.some((targetTitle) =>
-            torrentTitle.includes(targetTitle) || targetTitle.includes(torrentTitle),
-          ),
-        );
+        const matchesTitle =
+          normalizedTorrentTitles.some((torrentTitle) =>
+            effectiveTargets.some((targetTitle) =>
+              torrentTitle.includes(targetTitle) || targetTitle.includes(torrentTitle),
+            ),
+          ) ||
+          torrentTitles.some((title) => {
+            const firstWord = this.normalizeWords(title).split(' ')[0] ?? '';
+            return shortTargets.includes(firstWord);
+          });
 
         if (!matchesTitle) {
           return false;
@@ -668,8 +678,10 @@ export class TorrentParser {
         return false;
       }
       if (releaseYear !== undefined) {
-        const torrentYear = this.extractYear(torrent);
-        if (torrentYear !== undefined && Math.abs(torrentYear - releaseYear) > 1) {
+        // Um ano no nome ("Blade Runner 2049 (2017)") não pode descartar o
+        // filme: basta um dos anos do título bater, com ±1 de tolerância.
+        const torrentYears = this.extractYearCandidates(torrent);
+        if (torrentYears.length > 0 && !torrentYears.some((year) => Math.abs(year - releaseYear) <= 1)) {
           return false;
         }
       }
@@ -866,6 +878,31 @@ export class TorrentParser {
     return Array.from(titles);
   }
 
+  /**
+   * Anos possíveis do torrent: o campo de ano, se o indexer mandou; senão todos
+   * os anos (1950-2099) que aparecem nos textos, na ordem.
+   */
+  extractYearCandidates(torrent: TorrentLike): number[] {
+    const record = torrent as Record<string, unknown>;
+    const candidate = record.year ?? record.releaseYear ?? record.release_year ?? record.date;
+    if (typeof candidate === 'number' && Number.isFinite(candidate)) {
+      return [candidate];
+    }
+    if (typeof candidate === 'string') {
+      const match = candidate.match(/\d{4}/);
+      if (match) return [Number(match[0])];
+    }
+
+    const years: number[] = [];
+    for (const text of this.collectSearchableTexts(torrent)) {
+      for (const match of text.matchAll(/(?<!\d)((?:19[5-9]\d|20\d\d))(?!\d)/g)) {
+        const year = Number(match[1]);
+        if (!years.includes(year)) years.push(year);
+      }
+    }
+    return years;
+  }
+
   extractYear(torrent: TorrentLike): number | undefined {
     const record = torrent as Record<string, unknown>;
     const candidate = record.year ?? record.releaseYear ?? record.release_year ?? record.date;
@@ -942,7 +979,7 @@ export class TorrentParser {
   }
 
   static readonly SEASON_PATTERNS: { regex: RegExp; group: number }[] = [
-    { regex: /\bS(\d{1,3})(?:E\d{1,3})?\b/i, group: 1 },
+    { regex: /\bS(\d{1,3})(?:E\d{1,3})*\b/i, group: 1 },
     { regex: /\b(\d{1,2})[x×]\d{1,3}\b/i, group: 1 },
     { regex: /(\d{1,3})[ªºᵃᵒaAoO]\s*temporada/i, group: 1 },
     { regex: /\b(?:temporada|season)\s*(\d{1,3})\b/i, group: 1 },
@@ -976,7 +1013,7 @@ export class TorrentParser {
   ];
 
   static readonly EPISODE_PATTERNS: { regex: RegExp; group: number }[] = [
-    { regex: /\bS\d{1,3}E(\d{1,3})\b/i, group: 1 },
+    { regex: /\bS\d{1,3}E(\d{1,3})(?:E\d{1,3})*\b/i, group: 1 },
     { regex: /\b\d{1,2}[x×](\d{1,3})\b/i, group: 1 },
     { regex: /\bep\.?\s*(\d{1,3})\b/i, group: 1 },
     { regex: /(?<!S\d{0,3})\bE(\d{1,3})\b/i, group: 1 },
@@ -1132,11 +1169,40 @@ export class TorrentParser {
   }
 
   normalizeForComparison(value: string): string {
-    return value
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^a-z0-9]+/gi, '')
-      .toLowerCase();
+    return TorrentParser.sequelNumbersToDigits(
+      value
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase(),
+    ).replace(/[^a-z0-9]+/g, '');
+  }
+
+  /** Como normalizeForComparison, mas mantém as palavras separadas por espaço. */
+  normalizeWords(value: string): string {
+    return TorrentParser.sequelNumbersToDigits(
+      value
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase(),
+    )
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim();
+  }
+
+  private static readonly SEQUEL_NUMBER_WORDS: Record<string, string> = {
+    um: '1', uma: '1', one: '1',
+    dois: '2', duas: '2', two: '2',
+    tres: '3', three: '3',
+    quatro: '4', four: '4',
+    cinco: '5', five: '5',
+  };
+
+  /** "Parte Dois" e "Part Two" viram "parte 2"/"part 2" (texto já sem acento e minúsculo). */
+  private static sequelNumbersToDigits(value: string): string {
+    return value.replace(
+      /\b(parte|part|capitulo|chapter|volume|vol)\s+(um|uma|one|dois|duas|two|tres|three|quatro|four|cinco|five)\b/g,
+      (_match, keyword: string, word: string) => `${keyword} ${TorrentParser.SEQUEL_NUMBER_WORDS[word]}`,
+    );
   }
 
   collectMetaTitles(meta?: CinemetaMeta): string[] {
