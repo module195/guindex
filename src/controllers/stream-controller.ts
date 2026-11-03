@@ -3,6 +3,7 @@
  */
 
 import type { StremioStream, StreamRequest, StreamResponse } from '../models/stream-model.js';
+import { btihToHex } from '../utils/btih.js';
 import type { SourceStream, StreamContext } from '../models/source-model.js';
 import type { DebridProvider } from '../models/debrid-model.js';
 import { RealDebridService } from '../services/realdebrid-service.js';
@@ -671,12 +672,26 @@ export class StreamController {
     }
   }
 
+  /**
+   * Magnet com o btih em hex. Alguns sites publicam o hash em base32 (32
+   * caracteres) e o torrent-indexer devolve o magnet como veio, com o info_hash
+   * já em hex. O play do RD e do TorBox só reconhece hex: em base32, não acha o
+   * torrent na conta (cria outro a cada play) e o RD não guarda o bloqueio.
+   */
+  static magnetWithHexHash(magnet: string, infoHash?: string): string {
+    return magnet.replace(/(xt=urn:btih:)([^&]+)/i, (match, prefix: string, current: string) => {
+      if (/^[a-f0-9]{40}$/i.test(current)) return match;
+      const hex = btihToHex(infoHash) ?? btihToHex(current);
+      return hex ? `${prefix}${hex}` : match;
+    });
+  }
+
   private extractStreamMagnet(stream: SourceStream): string | undefined {
     if (stream.magnet && stream.magnet.toLowerCase().startsWith('magnet:')) {
-      return stream.magnet;
+      return StreamController.magnetWithHexHash(stream.magnet, stream.infoHash);
     }
     if (stream.url && stream.url.toLowerCase().startsWith('magnet:')) {
-      return stream.url;
+      return StreamController.magnetWithHexHash(stream.url, stream.infoHash);
     }
     if (stream.infoHash) {
       const normalizedHash = stream.infoHash.trim().toLowerCase();
