@@ -6,6 +6,13 @@ import { request } from 'undici';
 import { BaseSourceProvider, type SourceFetchOptions } from './base-source-provider.js';
 import type { SourceStream } from '../models/source-model.js';
 import { DEBRID_MARGIN_MS, REQUEST_BUDGET_MS } from './torrent-indexer-shared.js';
+import { readJsonCapped } from '../utils/read-capped.js';
+
+/** Tetos da resposta de um addon externo, aplicados antes da normalização síncrona. */
+const ADDON_MAX_BODY_BYTES = 2 * 1024 * 1024;
+const ADDON_MAX_STREAMS = 200;
+/** Texto examinado por pickSize. */
+const PICK_SIZE_MAX_TEXT = 2048;
 
 const FILE_EXT_REGEX = /\.(mkv|mp4|avi|m4v|ts|m2ts|iso|mpg|mpeg|wmv|mov|rar|zip)\b/i;
 const RESOLUTION_REGEX = /\b(2160p|1440p|1080p|720p|576p|480p|360p|240p)\b/i;
@@ -91,11 +98,13 @@ export class StremioAddonProvider extends BaseSourceProvider {
       throw new Error(`Failed to fetch streams from ${this.name}: ${response.statusCode}`);
     }
     
-    const data = await response.body.json() as {streams: SourceStream[]};
-    const streams = data.streams || [];
-    
+    const data = await readJsonCapped(response.body, ADDON_MAX_BODY_BYTES) as { streams?: unknown };
+    const streams = Array.isArray(data?.streams) ? data.streams.slice(0, ADDON_MAX_STREAMS) : [];
+
     // Attach source name to each stream
-    return streams.map((stream) => normalizeStream(stream, this.name));
+    return streams
+      .filter((stream): stream is SourceStream => !!stream && typeof stream === 'object')
+      .map((stream) => normalizeStream(stream, this.name));
   }
 }
 
@@ -419,8 +428,11 @@ function pickSize(
   if (Number.isFinite(hinted ?? NaN)) {
     return hinted;
   }
-  const combined = lines.join(' ');
-  const match = combined.match(/(\d+(?:\.\d+)?)\s*(TB|GB|MB|KB|B)\b/i);
+  // Texto vem do addon (menor confiança): truncado e com quantificadores
+  // limitados. Com \d+ livre e sem âncora, 32 mil dígitos sem unidade
+  // custavam ~3 s síncronos no event loop.
+  const combined = lines.join(' ').slice(0, PICK_SIZE_MAX_TEXT);
+  const match = combined.match(/(?<![\d.])(\d{1,6}(?:\.\d{1,3})?)\s*(TB|GB|MB|KB|B)\b/i);
   if (!match?.[1] || !match[2]) {
     return undefined;
   }
