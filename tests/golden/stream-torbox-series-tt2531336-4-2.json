@@ -1,0 +1,144 @@
+{
+  "streams": [
+    {
+      "name": "[TB+] 🇧🇷 🇺🇸 Starck Filmes 1080p",
+      "title": "📂 Lupin.2026.S04.WEB-DL.1080p.x264.DUAL.5.1-STARCKFILMES\n📄 S04E02.mkv",
+      "url": "https://guindex.test/torbox/tok-0123456789/resolve?magnet=magnet%3A%3Fxt%3Durn%3Abtih%3Ae0bd6b939a13644237518abf0412f57f09bdcb88%26dn%3DLupin.2026.S04.WEB-DL.1080p.x264.DUAL.5.1-STARCKFILMES%26xl%3D9085516204%26tr%3Dudp%253A%252F%252Ftracker.birkenwald.de%253A6969%252Fannounce%26tr%3Dhttps%253A%252F%252Ftrackers.mlsub.net%253A443%252Fannounce%26tr%3Dudp%253A%252F%252Fmartin-gebhardt.eu%253A25%252Fannounce%26tr%3Dudp%253A%252F%252Fopen.stealth.si%253A80%252Fannounce%26tr%3Dudp%253A%252F%252Fr.l5.ca%253A6969%252Fannounce%26tr%3Dudp%253A%252F%252Fu6.trakx.crim.ist%253A1337%252Fannounce%26tr%3Dudp%253A%252F%252Fp2p.publictracker.xyz%253A6969%252Fannounce%26tr%3Dudp%253A%252F%252Fu4.trakx.crim.ist%253A1337%252Fannounce%26tr%3Dhttp%253A%252F%252Ftracker.vraphim.com%253A6969%252Fannounce%26tr%3Dudp%253A%252F%252Fexplodie.org%253A6969%252Fannounce%26tr%3Dudp%253A%252F%252Ftracker.fnix.net%253A6969%252Fannounce%26tr%3Dudp%253A%252F%252Fttk2.nbaonlineservice.com%253A6969%252Fannounce%26tr%3Dudp%253A%252F%252Ftracker.opentrackr.org%253A1337%252Fannounce%26tr%3Dudp%253A%252F%252Fevan.im%253A6969%252Fannounce%26tr%3Dhttps%253A%252F%252Ftracker.yemekyedim.com%253A443%252Fannounce%26tr%3Dudp%253A%252F%252Fp4p.arenabg.com%253A1337%252Fannounce%26tr%3Dudp%253A%252F%252Fretracker.hotplug.ru%253A2710%252Fannounce%26tr%3Dhttp%253A%252F%252Ftracker.bt4g.com%253A2095%252Fannounce%26tr%3Dhttp%253A%252F%252Fbt.okmp3.ru%253A2710%252Fannounce%26tr%3Dudp%253A%252F%252Ftracker.torrent.eu.org%253A451%252Fannounce%26tr%3Dhttp%253A%252F%252Ftracker.mywaifu.best%253A6969%252Fannounce%26tr%3Dhttp%253A%252F%252Ftracker.privateseedbox.xyz%253A2710%252Fannounce&linkType=torrent&ctx=eyJ0eXBlIjoic2VyaWVzIiwic2Vhc29uIjo0LCJlcGlzb2RlIjoyLCJ0aXRsZSI6Ikx1cGluLjIwMjYuUzA0LldFQi1ETC4xMDgwcC54MjY0LkRVQUwuNS4xLVNUQVJDS0ZJTE1FUyIsInllYXIiOjIwMjZ9",
+      "infoHash": "e0bd6b939a13644237518abf0412f57f09bdcb88",
+      "sources": [
+        "tracker:udp://tracker.birkenwald.de:6969/announce",
+        "tracker:https://trackers.mlsub.net:443/announce",
+        "tracker:udp://martin-gebhardt.eu:25/announce",
+        "tracker:udp://open.stealth.si:80/announce",
+        "tracker:udp://r.l5.ca:6969/announce",
+        "tracker:udp://u6.trakx.crim.ist:1337/announce",
+        "tracker:udp://p2p.publictracker.xyz:6969/announce",
+        "tracker:udp://u4.trakx.crim.ist:1337/announce",
+        "tracker:http://tracker.vraphim.com:6969/announce",
+        "tracker:udp://explodie.org:6969/announce",
+        "tracker:udp://tracker.fnix.net:6969/announce",
+        "tracker:udp://ttk2.nbaonlineservice.com:6969/announce",
+        "tracker:udp://tracker.opentrackr.org:1337/announce",
+        "tracker:udp://evan.im:6969/announce",
+        "tracker:https://tracker.yemekyedim.com:443/announce",
+        "dht:e0bd6b939a13644237518abf0412f57f09bdcb88"
+      ],
+      "size": 9083855831,
+      "seeders": 37,
+      "quality": "1080p",
+      "languages": [
+        "Portuguese",
+        "English"
+      ],
+      "indexer": "rede_torrent",
+      "filename": "Lupin.2026.S04.WEB-DL.1080p.x264.DUAL.5.1-STARCKFILMES",
+      "releaseGroup": "rede_torrent",
+      "behaviorHints": {
+        "videoSize": 9083855831,
+        "torboxReady": true,
+        "bingeGroup": "starck filmes|torbox|e0bd6b939a13644237518abf0412f57f09bdcb88",
+        "seeders": 37,
+        "indexer": "Rede Torrent",
+        "service": "torbox",
+        "cached": true,
+        "filename": "Lupin.2026.S04.WEB-DL.1080p.x264.DUAL.5.1-STARCKFILMES"
+      }
+    },
+    {
+      "name": "[TB+] 🇧🇷 🇺🇸 🇫🇷 Redestorrents 1080p",
+      "title": "📂 Lupin S04 1080p x265 WEB-DL DUAL 5 1 (brazilian, eng, fra)\n📄 S04E02.mkv",
+      "url": "https://guindex.test/torbox/tok-0123456789/resolve?magnet=magnet%3A%3Fxt%3Durn%3Abtih%3A829160119aa195c8c5372f331538b205675eb07c%26tr%3Dudp%253A%252F%252Ftracker.opentrackr.org%253A1337%252Fannounce%26dn%3DBAIXARAPIDO.COM-.TEMPORADA-04.WEB-DL.1080P.MKV.5.1.-DUBLADO-DUAL-AUDIO-.Lupin.S04.1080p.x265.WEB-DL.DUAL.5.1%26tr%3Dudp%253A%252F%252Fp4p.arenabg.com%253A1337%252Fannounce%26tr%3Dudp%253A%252F%252Fretracker.hotplug.ru%253A2710%252Fannounce%26tr%3Dhttp%253A%252F%252Ftracker.bt4g.com%253A2095%252Fannounce%26tr%3Dhttp%253A%252F%252Fbt.okmp3.ru%253A2710%252Fannounce%26tr%3Dudp%253A%252F%252Ftracker.torrent.eu.org%253A451%252Fannounce%26tr%3Dhttp%253A%252F%252Ftracker.mywaifu.best%253A6969%252Fannounce%26tr%3Dudp%253A%252F%252Fttk2.nbaonlineservice.com%253A6969%252Fannounce%26tr%3Dhttp%253A%252F%252Ftracker.privateseedbox.xyz%253A2710%252Fannounce%26tr%3Dudp%253A%252F%252Fevan.im%253A6969%252Fannounce&linkType=torrent&ctx=eyJ0eXBlIjoic2VyaWVzIiwic2Vhc29uIjo0LCJlcGlzb2RlIjoyLCJ0aXRsZSI6Ikx1cGluIFMwNCAxMDgwcCB4MjY1IFdFQi1ETCBEVUFMIDUgMSAoYnJhemlsaWFuLCBlbmcsIGZyYSkgKDIwMjYpIiwieWVhciI6MjAyNn0",
+      "infoHash": "829160119aa195c8c5372f331538b205675eb07c",
+      "sources": [
+        "tracker:udp://tracker.opentrackr.org:1337/announce",
+        "tracker:udp://p4p.arenabg.com:1337/announce",
+        "tracker:udp://retracker.hotplug.ru:2710/announce",
+        "tracker:http://tracker.bt4g.com:2095/announce",
+        "tracker:http://bt.okmp3.ru:2710/announce",
+        "tracker:udp://tracker.torrent.eu.org:451/announce",
+        "tracker:http://tracker.mywaifu.best:6969/announce",
+        "tracker:udp://ttk2.nbaonlineservice.com:6969/announce",
+        "tracker:http://tracker.privateseedbox.xyz:2710/announce",
+        "tracker:udp://evan.im:6969/announce",
+        "dht:829160119aa195c8c5372f331538b205675eb07c"
+      ],
+      "size": 6839735419,
+      "quality": "1080p",
+      "languages": [
+        "Portuguese",
+        "English",
+        "French"
+      ],
+      "indexer": "bludv_ru",
+      "filename": "Lupin.S04.1080p.x265.WEB-DL.DUAL.5.1",
+      "releaseGroup": "bludv_ru",
+      "behaviorHints": {
+        "videoSize": 6839735419,
+        "torboxReady": true,
+        "bingeGroup": "redestorrents|torbox|829160119aa195c8c5372f331538b205675eb07c",
+        "indexer": "BluDV",
+        "publishDate": "2026-10-24T00:17:54.000Z",
+        "service": "torbox",
+        "cached": true,
+        "filename": "Lupin.S04.1080p.x265.WEB-DL.DUAL.5.1"
+      }
+    },
+    {
+      "name": "[TB+] 🇧🇷 Example 1080p",
+      "title": "Lupin S04E02 1080p DUAL (2026)",
+      "url": "https://guindex.test/torbox/tok-0123456789/resolve?magnet=magnet%3A%3Fxt%3Durn%3Abtih%3A8888888888888888888888888888888888888888%26dn%3Dx&linkType=torrent&ctx=eyJ0eXBlIjoic2VyaWVzIiwic2Vhc29uIjo0LCJlcGlzb2RlIjoyLCJ0aXRsZSI6Ikx1cGluIFMwNEUwMiAxMDgwcCBEVUFMICgyMDI2KSIsInllYXIiOjIwMjZ9",
+      "infoHash": "8888888888888888888888888888888888888888",
+      "sources": [
+        "dht:8888888888888888888888888888888888888888"
+      ],
+      "size": 2254857830,
+      "seeders": 5,
+      "quality": "1080p",
+      "languages": [
+        "Portuguese"
+      ],
+      "indexer": "betor",
+      "filename": "x.PT-BR",
+      "releaseGroup": "betor",
+      "behaviorHints": {
+        "videoSize": 2254857830,
+        "torboxReady": true,
+        "bingeGroup": "example|torbox|8888888888888888888888888888888888888888",
+        "seeders": 5,
+        "indexer": "BeTor",
+        "service": "torbox",
+        "cached": true,
+        "filename": "x.PT-BR"
+      }
+    },
+    {
+      "name": "[TB⏳] 🇧🇷 Example 1080p",
+      "title": "Lupin S04E01-E03 1080p DUAL (2026)",
+      "url": "https://guindex.test/torbox/tok-0123456789/resolve?magnet=magnet%3A%3Fxt%3Durn%3Abtih%3A9999999999999999999999999999999999999999%26dn%3Dx&linkType=torrent&ctx=eyJ0eXBlIjoic2VyaWVzIiwic2Vhc29uIjo0LCJlcGlzb2RlIjoyLCJ0aXRsZSI6Ikx1cGluIFMwNEUwMS1FMDMgMTA4MHAgRFVBTCAoMjAyNikiLCJ5ZWFyIjoyMDI2fQ",
+      "infoHash": "9999999999999999999999999999999999999999",
+      "sources": [
+        "dht:9999999999999999999999999999999999999999"
+      ],
+      "size": 2254857830,
+      "seeders": 5,
+      "quality": "1080p",
+      "languages": [
+        "Portuguese"
+      ],
+      "indexer": "betor",
+      "filename": "x.PT-BR",
+      "releaseGroup": "betor",
+      "behaviorHints": {
+        "videoSize": 2254857830,
+        "torboxReady": false,
+        "notWebReady": true,
+        "bingeGroup": "example|torbox|9999999999999999999999999999999999999999",
+        "seeders": 5,
+        "indexer": "BeTor",
+        "service": "torbox",
+        "cached": false,
+        "filename": "x.PT-BR"
+      }
+    }
+  ]
+}

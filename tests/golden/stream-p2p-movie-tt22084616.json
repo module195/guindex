@@ -1,0 +1,217 @@
+{
+  "streams": [
+    {
+      "name": "GuIndex 🇧🇷 🇺🇸\n1080p",
+      "title": "Homem-Aranha.Um.Novo.Dia.2026.WEB-DL.1080p.x264.DUAL.5.1-STARCKFILMES",
+      "url": "magnet:?xt=urn:btih:2a6b5b14ef835da8e3d595c4d185ebe43d093e5d&dn=Homem-Aranha.Um.Novo.Dia.2026.WEB-DL.1080p.x264.DUAL.5.1-STARCKFILMES&xl=3786680563&tr=udp%3A%2F%2Fu6.trakx.crim.ist%3A1337%2Fannounce&tr=https%3A%2F%2Ftrackers.mlsub.net%3A443%2Fannounce&tr=udp%3A%2F%2Ftracker.birkenwald.de%3A6969%2Fannounce&tr=udp%3A%2F%2Fevan.im%3A6969%2Fannounce&tr=udp%3A%2F%2Fttk2.nbaonlineservice.com%3A6969%2Fannounce&tr=udp%3A%2F%2Fp2p.publictracker.xyz%3A6969%2Fannounce&tr=udp%3A%2F%2Fexplodie.org%3A6969%2Fannounce&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce&tr=udp%3A%2F%2Fr.l5.ca%3A6969%2Fannounce&tr=https%3A%2F%2Ftracker.yemekyedim.com%3A443%2Fannounce&tr=udp%3A%2F%2Fu4.trakx.crim.ist%3A1337%2Fannounce&tr=udp%3A%2F%2Fmartin-gebhardt.eu%3A25%2Fannounce&tr=udp%3A%2F%2Fopen.stealth.si%3A80%2Fannounce&tr=udp%3A%2F%2Ftracker.fnix.net%3A6969%2Fannounce&tr=http%3A%2F%2Ftracker.vraphim.com%3A6969%2Fannounce&tr=udp%3A%2F%2Fp4p.arenabg.com%3A1337%2Fannounce&tr=udp%3A%2F%2Fretracker.hotplug.ru%3A2710%2Fannounce&tr=http%3A%2F%2Ftracker.bt4g.com%3A2095%2Fannounce&tr=http%3A%2F%2Fbt.okmp3.ru%3A2710%2Fannounce&tr=udp%3A%2F%2Ftracker.torrent.eu.org%3A451%2Fannounce&tr=http%3A%2F%2Ftracker.mywaifu.best%3A6969%2Fannounce&tr=http%3A%2F%2Ftracker.privateseedbox.xyz%3A2710%2Fannounce",
+      "infoHash": "2a6b5b14ef835da8e3d595c4d185ebe43d093e5d",
+      "sources": [
+        "tracker:udp://u6.trakx.crim.ist:1337/announce",
+        "tracker:https://trackers.mlsub.net:443/announce",
+        "tracker:udp://tracker.birkenwald.de:6969/announce",
+        "tracker:udp://evan.im:6969/announce",
+        "tracker:udp://ttk2.nbaonlineservice.com:6969/announce",
+        "tracker:udp://p2p.publictracker.xyz:6969/announce",
+        "tracker:udp://explodie.org:6969/announce",
+        "tracker:udp://tracker.opentrackr.org:1337/announce",
+        "tracker:udp://r.l5.ca:6969/announce",
+        "tracker:https://tracker.yemekyedim.com:443/announce",
+        "tracker:udp://u4.trakx.crim.ist:1337/announce",
+        "tracker:udp://martin-gebhardt.eu:25/announce",
+        "tracker:udp://open.stealth.si:80/announce",
+        "tracker:udp://tracker.fnix.net:6969/announce",
+        "tracker:http://tracker.vraphim.com:6969/announce",
+        "dht:2a6b5b14ef835da8e3d595c4d185ebe43d093e5d"
+      ],
+      "size": 3790308639,
+      "seeders": 2,
+      "quality": "1080p",
+      "languages": [
+        "Portuguese",
+        "English"
+      ],
+      "indexer": "rede_torrent",
+      "filename": "Homem-Aranha.Um.Novo.Dia.2026.WEB-DL.1080p.x264.DUAL.5.1-STARCKFILMES",
+      "releaseGroup": "rede_torrent",
+      "behaviorHints": {
+        "videoSize": 3790308639,
+        "notWebReady": true,
+        "realDebridReady": false,
+        "bingeGroup": "starck filmes|realdebrid|2a6b5b14ef835da8e3d595c4d185ebe43d093e5d",
+        "fallbackMagnet": "magnet:?xt=urn:btih:2a6b5b14ef835da8e3d595c4d185ebe43d093e5d&dn=Homem-Aranha.Um.Novo.Dia.2026.WEB-DL.1080p.x264.DUAL.5.1-STARCKFILMES&xl=3786680563&tr=udp%3A%2F%2Fu6.trakx.crim.ist%3A1337%2Fannounce&tr=https%3A%2F%2Ftrackers.mlsub.net%3A443%2Fannounce&tr=udp%3A%2F%2Ftracker.birkenwald.de%3A6969%2Fannounce&tr=udp%3A%2F%2Fevan.im%3A6969%2Fannounce&tr=udp%3A%2F%2Fttk2.nbaonlineservice.com%3A6969%2Fannounce&tr=udp%3A%2F%2Fp2p.publictracker.xyz%3A6969%2Fannounce&tr=udp%3A%2F%2Fexplodie.org%3A6969%2Fannounce&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce&tr=udp%3A%2F%2Fr.l5.ca%3A6969%2Fannounce&tr=https%3A%2F%2Ftracker.yemekyedim.com%3A443%2Fannounce&tr=udp%3A%2F%2Fu4.trakx.crim.ist%3A1337%2Fannounce&tr=udp%3A%2F%2Fmartin-gebhardt.eu%3A25%2Fannounce&tr=udp%3A%2F%2Fopen.stealth.si%3A80%2Fannounce&tr=udp%3A%2F%2Ftracker.fnix.net%3A6969%2Fannounce&tr=http%3A%2F%2Ftracker.vraphim.com%3A6969%2Fannounce&tr=udp%3A%2F%2Fp4p.arenabg.com%3A1337%2Fannounce&tr=udp%3A%2F%2Fretracker.hotplug.ru%3A2710%2Fannounce&tr=http%3A%2F%2Ftracker.bt4g.com%3A2095%2Fannounce&tr=http%3A%2F%2Fbt.okmp3.ru%3A2710%2Fannounce&tr=udp%3A%2F%2Ftracker.torrent.eu.org%3A451%2Fannounce&tr=http%3A%2F%2Ftracker.mywaifu.best%3A6969%2Fannounce&tr=http%3A%2F%2Ftracker.privateseedbox.xyz%3A2710%2Fannounce",
+        "seeders": 2,
+        "indexer": "Rede Torrent",
+        "filename": "Homem-Aranha.Um.Novo.Dia.2026.WEB-DL.1080p.x264.DUAL.5.1-STARCKFILMES"
+      }
+    },
+    {
+      "name": "GuIndex 🇧🇷 🇺🇸\n1080p",
+      "title": "Homem-Aranha.Um.Novo.Dia.2026.WEB-DL.1080p.x264.FULLHD.DUAL.5.1-STARCKFILMES",
+      "url": "magnet:?xt=urn:btih:e7ca9615df5424db2e00a0f8d9f4c617c01a86b8&dn=Homem-Aranha.Um.Novo.Dia.2026.WEB-DL.1080p.x264.FULLHD.DUAL.5.1-STARCKFILMES&xl=10350192292&tr=udp%3A%2F%2Fu4.trakx.crim.ist%3A1337%2Fannounce&tr=udp%3A%2F%2Fttk2.nbaonlineservice.com%3A6969%2Fannounce&tr=udp%3A%2F%2Fexplodie.org%3A6969%2Fannounce&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce&tr=udp%3A%2F%2Fopen.stealth.si%3A80%2Fannounce&tr=udp%3A%2F%2Ftracker.fnix.net%3A6969%2Fannounce&tr=udp%3A%2F%2Fr.l5.ca%3A6969%2Fannounce&tr=https%3A%2F%2Ftrackers.mlsub.net%3A443%2Fannounce&tr=https%3A%2F%2Ftracker.yemekyedim.com%3A443%2Fannounce&tr=udp%3A%2F%2Fu6.trakx.crim.ist%3A1337%2Fannounce&tr=udp%3A%2F%2Ftracker.birkenwald.de%3A6969%2Fannounce&tr=udp%3A%2F%2Fp2p.publictracker.xyz%3A6969%2Fannounce&tr=udp%3A%2F%2Fevan.im%3A6969%2Fannounce&tr=udp%3A%2F%2Fmartin-gebhardt.eu%3A25%2Fannounce&tr=http%3A%2F%2Ftracker.vraphim.com%3A6969%2Fannounce&tr=udp%3A%2F%2Fp4p.arenabg.com%3A1337%2Fannounce&tr=udp%3A%2F%2Fretracker.hotplug.ru%3A2710%2Fannounce&tr=http%3A%2F%2Ftracker.bt4g.com%3A2095%2Fannounce&tr=http%3A%2F%2Fbt.okmp3.ru%3A2710%2Fannounce&tr=udp%3A%2F%2Ftracker.torrent.eu.org%3A451%2Fannounce&tr=http%3A%2F%2Ftracker.mywaifu.best%3A6969%2Fannounce&tr=http%3A%2F%2Ftracker.privateseedbox.xyz%3A2710%2Fannounce",
+      "infoHash": "e7ca9615df5424db2e00a0f8d9f4c617c01a86b8",
+      "sources": [
+        "tracker:udp://u4.trakx.crim.ist:1337/announce",
+        "tracker:udp://ttk2.nbaonlineservice.com:6969/announce",
+        "tracker:udp://explodie.org:6969/announce",
+        "tracker:udp://tracker.opentrackr.org:1337/announce",
+        "tracker:udp://open.stealth.si:80/announce",
+        "tracker:udp://tracker.fnix.net:6969/announce",
+        "tracker:udp://r.l5.ca:6969/announce",
+        "tracker:https://trackers.mlsub.net:443/announce",
+        "tracker:https://tracker.yemekyedim.com:443/announce",
+        "tracker:udp://u6.trakx.crim.ist:1337/announce",
+        "tracker:udp://tracker.birkenwald.de:6969/announce",
+        "tracker:udp://p2p.publictracker.xyz:6969/announce",
+        "tracker:udp://evan.im:6969/announce",
+        "tracker:udp://martin-gebhardt.eu:25/announce",
+        "tracker:http://tracker.vraphim.com:6969/announce",
+        "dht:e7ca9615df5424db2e00a0f8d9f4c617c01a86b8"
+      ],
+      "size": 10350871183,
+      "seeders": 39,
+      "quality": "1080p",
+      "languages": [
+        "Portuguese",
+        "English"
+      ],
+      "indexer": "starck_filmes",
+      "filename": "Homem-Aranha.Um.Novo.Dia.2026.WEB-DL.1080p.x264.FULLHD.DUAL.5.1-STARCKFILMES",
+      "releaseGroup": "starck_filmes",
+      "behaviorHints": {
+        "videoSize": 10350871183,
+        "notWebReady": true,
+        "realDebridReady": false,
+        "bingeGroup": "starck filmes|realdebrid|e7ca9615df5424db2e00a0f8d9f4c617c01a86b8",
+        "fallbackMagnet": "magnet:?xt=urn:btih:e7ca9615df5424db2e00a0f8d9f4c617c01a86b8&dn=Homem-Aranha.Um.Novo.Dia.2026.WEB-DL.1080p.x264.FULLHD.DUAL.5.1-STARCKFILMES&xl=10350192292&tr=udp%3A%2F%2Fu4.trakx.crim.ist%3A1337%2Fannounce&tr=udp%3A%2F%2Fttk2.nbaonlineservice.com%3A6969%2Fannounce&tr=udp%3A%2F%2Fexplodie.org%3A6969%2Fannounce&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce&tr=udp%3A%2F%2Fopen.stealth.si%3A80%2Fannounce&tr=udp%3A%2F%2Ftracker.fnix.net%3A6969%2Fannounce&tr=udp%3A%2F%2Fr.l5.ca%3A6969%2Fannounce&tr=https%3A%2F%2Ftrackers.mlsub.net%3A443%2Fannounce&tr=https%3A%2F%2Ftracker.yemekyedim.com%3A443%2Fannounce&tr=udp%3A%2F%2Fu6.trakx.crim.ist%3A1337%2Fannounce&tr=udp%3A%2F%2Ftracker.birkenwald.de%3A6969%2Fannounce&tr=udp%3A%2F%2Fp2p.publictracker.xyz%3A6969%2Fannounce&tr=udp%3A%2F%2Fevan.im%3A6969%2Fannounce&tr=udp%3A%2F%2Fmartin-gebhardt.eu%3A25%2Fannounce&tr=http%3A%2F%2Ftracker.vraphim.com%3A6969%2Fannounce&tr=udp%3A%2F%2Fp4p.arenabg.com%3A1337%2Fannounce&tr=udp%3A%2F%2Fretracker.hotplug.ru%3A2710%2Fannounce&tr=http%3A%2F%2Ftracker.bt4g.com%3A2095%2Fannounce&tr=http%3A%2F%2Fbt.okmp3.ru%3A2710%2Fannounce&tr=udp%3A%2F%2Ftracker.torrent.eu.org%3A451%2Fannounce&tr=http%3A%2F%2Ftracker.mywaifu.best%3A6969%2Fannounce&tr=http%3A%2F%2Ftracker.privateseedbox.xyz%3A2710%2Fannounce",
+        "seeders": 39,
+        "indexer": "Starck Filmes",
+        "filename": "Homem-Aranha.Um.Novo.Dia.2026.WEB-DL.1080p.x264.FULLHD.DUAL.5.1-STARCKFILMES"
+      }
+    },
+    {
+      "name": "GuIndex 🇧🇷 🇺🇸\n4K",
+      "title": "Homem-Aranha - Um Novo Dia 2026 WEB-DL 2160p x265 DV HDR10+ DUAL 5.1",
+      "url": "magnet:?xt=urn:btih:5c0e393cc4585af21cbf2d1a1a63c1e4906161da&dn=Homem-Aranha%20-%20Um%20Novo%20Dia%202026%20WEB-DL%202160p%20x265%20DV%20HDR10%2B%20DUAL%205.1&xl=27859157829&tr=udp%3A%2F%2Ftracker.openbittorrent.com%3A80%2Fannounce&tr=udp%3A%2F%2Ftracker.trackerfix.com%3A83%2Fannounce&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce&tr=udp%3A%2F%2Ftracker.trackerfix.com%3A80%2Fannounce&tr=udp%3A%2F%2Ftracker.coppersurfer.tk%3A6969%2Fannounce&tr=udp%3A%2F%2Ftracker.leechers-paradise.org%3A6969%2Fannounce&tr=udp%3A%2F%2Feddie4.nl%3A6969%2Fannounce&tr=udp%3A%2F%2Fp4p.arenabg.com%3A1337%2Fannounce&tr=udp%3A%2F%2Fexplodie.org%3A6969%2Fannounce&tr=udp%3A%2F%2Fzer0day.ch%3A1337%2Fannounce&tr=udp%3A%2F%2Fglotorrents.pw%3A6969%2Fannounce&tr=udp%3A%2F%2Ftorrent.gresille.org%3A80%2Fannounce&tr=udp%3A%2F%2Fp4p.arenabg.ch%3A1337&tr=udp%3A%2F%2Ftracker.internetwarriors.net%3A1337&tr=udp%3A%2F%2Fretracker.hotplug.ru%3A2710%2Fannounce&tr=http%3A%2F%2Ftracker.bt4g.com%3A2095%2Fannounce&tr=http%3A%2F%2Fbt.okmp3.ru%3A2710%2Fannounce&tr=udp%3A%2F%2Ftracker.torrent.eu.org%3A451%2Fannounce&tr=http%3A%2F%2Ftracker.mywaifu.best%3A6969%2Fannounce&tr=udp%3A%2F%2Fttk2.nbaonlineservice.com%3A6969%2Fannounce&tr=http%3A%2F%2Ftracker.privateseedbox.xyz%3A2710%2Fannounce&tr=udp%3A%2F%2Fevan.im%3A6969%2Fannounce",
+      "infoHash": "5c0e393cc4585af21cbf2d1a1a63c1e4906161da",
+      "sources": [
+        "tracker:udp://tracker.openbittorrent.com:80/announce",
+        "tracker:udp://tracker.trackerfix.com:83/announce",
+        "tracker:udp://tracker.opentrackr.org:1337/announce",
+        "tracker:udp://tracker.trackerfix.com:80/announce",
+        "tracker:udp://tracker.coppersurfer.tk:6969/announce",
+        "tracker:udp://tracker.leechers-paradise.org:6969/announce",
+        "tracker:udp://eddie4.nl:6969/announce",
+        "tracker:udp://p4p.arenabg.com:1337/announce",
+        "tracker:udp://explodie.org:6969/announce",
+        "tracker:udp://zer0day.ch:1337/announce",
+        "tracker:udp://glotorrents.pw:6969/announce",
+        "tracker:udp://torrent.gresille.org:80/announce",
+        "tracker:udp://p4p.arenabg.ch:1337",
+        "tracker:udp://tracker.internetwarriors.net:1337",
+        "tracker:udp://retracker.hotplug.ru:2710/announce",
+        "dht:5c0e393cc4585af21cbf2d1a1a63c1e4906161da"
+      ],
+      "size": 27863600333,
+      "seeders": 76,
+      "quality": "4K",
+      "languages": [
+        "Portuguese",
+        "English"
+      ],
+      "indexer": "torrentfilmeshds",
+      "filename": "Homem-Aranha - Um Novo Dia 2026 WEB-DL 2160p x265 DV HDR10+ DUAL 5.1",
+      "releaseGroup": "torrentfilmeshds",
+      "behaviorHints": {
+        "videoSize": 27863600333,
+        "notWebReady": true,
+        "realDebridReady": false,
+        "bingeGroup": "starck filmes|realdebrid|5c0e393cc4585af21cbf2d1a1a63c1e4906161da",
+        "fallbackMagnet": "magnet:?xt=urn:btih:5c0e393cc4585af21cbf2d1a1a63c1e4906161da&dn=Homem-Aranha%20-%20Um%20Novo%20Dia%202026%20WEB-DL%202160p%20x265%20DV%20HDR10%2B%20DUAL%205.1&xl=27859157829&tr=udp%3A%2F%2Ftracker.openbittorrent.com%3A80%2Fannounce&tr=udp%3A%2F%2Ftracker.trackerfix.com%3A83%2Fannounce&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce&tr=udp%3A%2F%2Ftracker.trackerfix.com%3A80%2Fannounce&tr=udp%3A%2F%2Ftracker.coppersurfer.tk%3A6969%2Fannounce&tr=udp%3A%2F%2Ftracker.leechers-paradise.org%3A6969%2Fannounce&tr=udp%3A%2F%2Feddie4.nl%3A6969%2Fannounce&tr=udp%3A%2F%2Fp4p.arenabg.com%3A1337%2Fannounce&tr=udp%3A%2F%2Fexplodie.org%3A6969%2Fannounce&tr=udp%3A%2F%2Fzer0day.ch%3A1337%2Fannounce&tr=udp%3A%2F%2Fglotorrents.pw%3A6969%2Fannounce&tr=udp%3A%2F%2Ftorrent.gresille.org%3A80%2Fannounce&tr=udp%3A%2F%2Fp4p.arenabg.ch%3A1337&tr=udp%3A%2F%2Ftracker.internetwarriors.net%3A1337&tr=udp%3A%2F%2Fretracker.hotplug.ru%3A2710%2Fannounce&tr=http%3A%2F%2Ftracker.bt4g.com%3A2095%2Fannounce&tr=http%3A%2F%2Fbt.okmp3.ru%3A2710%2Fannounce&tr=udp%3A%2F%2Ftracker.torrent.eu.org%3A451%2Fannounce&tr=http%3A%2F%2Ftracker.mywaifu.best%3A6969%2Fannounce&tr=udp%3A%2F%2Fttk2.nbaonlineservice.com%3A6969%2Fannounce&tr=http%3A%2F%2Ftracker.privateseedbox.xyz%3A2710%2Fannounce&tr=udp%3A%2F%2Fevan.im%3A6969%2Fannounce",
+        "seeders": 76,
+        "indexer": "Torrent Filmes HDs",
+        "publishDate": "2026-10-05T15:43:56.000Z",
+        "filename": "Homem-Aranha - Um Novo Dia 2026 WEB-DL 2160p x265 DV HDR10+ DUAL 5.1"
+      }
+    },
+    {
+      "name": "GuIndex 🇧🇷 🇺🇸\n1080p",
+      "title": "Homem-Aranha Um Novo Dia.2026.1080p.FULL.HD.WEB-DL.DUAL.5.1",
+      "url": "magnet:?xt=urn:btih:b101eb5c537399a77045bd88928483bb673a88f4&dn=Homem-Aranha%20Um%20Novo%20Dia.2026.1080p.FULL.HD.WEB-DL.DUAL.5.1&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce&tr=udp%3A%2F%2Fp4p.arenabg.com%3A1337%2Fannounce&tr=udp%3A%2F%2Fretracker.hotplug.ru%3A2710%2Fannounce&tr=http%3A%2F%2Ftracker.bt4g.com%3A2095%2Fannounce&tr=http%3A%2F%2Fbt.okmp3.ru%3A2710%2Fannounce&tr=udp%3A%2F%2Ftracker.torrent.eu.org%3A451%2Fannounce&tr=http%3A%2F%2Ftracker.mywaifu.best%3A6969%2Fannounce&tr=udp%3A%2F%2Fttk2.nbaonlineservice.com%3A6969%2Fannounce&tr=http%3A%2F%2Ftracker.privateseedbox.xyz%3A2710%2Fannounce&tr=udp%3A%2F%2Fevan.im%3A6969%2Fannounce",
+      "infoHash": "b101eb5c537399a77045bd88928483bb673a88f4",
+      "sources": [
+        "tracker:udp://tracker.opentrackr.org:1337/announce",
+        "tracker:udp://p4p.arenabg.com:1337/announce",
+        "tracker:udp://retracker.hotplug.ru:2710/announce",
+        "tracker:http://tracker.bt4g.com:2095/announce",
+        "tracker:http://bt.okmp3.ru:2710/announce",
+        "tracker:udp://tracker.torrent.eu.org:451/announce",
+        "tracker:http://tracker.mywaifu.best:6969/announce",
+        "tracker:udp://ttk2.nbaonlineservice.com:6969/announce",
+        "tracker:http://tracker.privateseedbox.xyz:2710/announce",
+        "tracker:udp://evan.im:6969/announce",
+        "dht:b101eb5c537399a77045bd88928483bb673a88f4"
+      ],
+      "size": 10769630495,
+      "seeders": 87,
+      "quality": "1080p",
+      "languages": [
+        "Portuguese",
+        "English"
+      ],
+      "indexer": "rede_torrent",
+      "filename": "Homem-Aranha Um Novo Dia.2026.1080p.FULL.HD.WEB-DL.DUAL.5.1",
+      "releaseGroup": "rede_torrent",
+      "behaviorHints": {
+        "videoSize": 10769630495,
+        "notWebReady": true,
+        "realDebridReady": false,
+        "bingeGroup": "bludv|realdebrid|b101eb5c537399a77045bd88928483bb673a88f4",
+        "fallbackMagnet": "magnet:?xt=urn:btih:b101eb5c537399a77045bd88928483bb673a88f4&dn=Homem-Aranha%20Um%20Novo%20Dia.2026.1080p.FULL.HD.WEB-DL.DUAL.5.1&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce&tr=udp%3A%2F%2Fp4p.arenabg.com%3A1337%2Fannounce&tr=udp%3A%2F%2Fretracker.hotplug.ru%3A2710%2Fannounce&tr=http%3A%2F%2Ftracker.bt4g.com%3A2095%2Fannounce&tr=http%3A%2F%2Fbt.okmp3.ru%3A2710%2Fannounce&tr=udp%3A%2F%2Ftracker.torrent.eu.org%3A451%2Fannounce&tr=http%3A%2F%2Ftracker.mywaifu.best%3A6969%2Fannounce&tr=udp%3A%2F%2Fttk2.nbaonlineservice.com%3A6969%2Fannounce&tr=http%3A%2F%2Ftracker.privateseedbox.xyz%3A2710%2Fannounce&tr=udp%3A%2F%2Fevan.im%3A6969%2Fannounce",
+        "seeders": 87,
+        "indexer": "Rede Torrent",
+        "publishDate": "2026-10-05T15:43:56.000Z",
+        "filename": "Homem-Aranha Um Novo Dia.2026.1080p.FULL.HD.WEB-DL.DUAL.5.1"
+      }
+    },
+    {
+      "name": "GuIndex 🇧🇷 🇺🇸\n1080p",
+      "title": "Homem-Aranha Um Novo Dia.2026.1080p.WEB-DL.x264.DUAL.5.1",
+      "url": "magnet:?xt=urn:btih:43ae6898e2b814e6526b0f1d6bf0aefa98e68147&dn=Homem-Aranha%20Um%20Novo%20Dia.2026.1080p.WEB-DL.x264.DUAL.5.1&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce&tr=udp%3A%2F%2Fp4p.arenabg.com%3A1337%2Fannounce&tr=udp%3A%2F%2Fretracker.hotplug.ru%3A2710%2Fannounce&tr=http%3A%2F%2Ftracker.bt4g.com%3A2095%2Fannounce&tr=http%3A%2F%2Fbt.okmp3.ru%3A2710%2Fannounce&tr=udp%3A%2F%2Ftracker.torrent.eu.org%3A451%2Fannounce&tr=http%3A%2F%2Ftracker.mywaifu.best%3A6969%2Fannounce&tr=udp%3A%2F%2Fttk2.nbaonlineservice.com%3A6969%2Fannounce&tr=http%3A%2F%2Ftracker.privateseedbox.xyz%3A2710%2Fannounce&tr=udp%3A%2F%2Fevan.im%3A6969%2Fannounce",
+      "infoHash": "43ae6898e2b814e6526b0f1d6bf0aefa98e68147",
+      "sources": [
+        "tracker:udp://tracker.opentrackr.org:1337/announce",
+        "tracker:udp://p4p.arenabg.com:1337/announce",
+        "tracker:udp://retracker.hotplug.ru:2710/announce",
+        "tracker:http://tracker.bt4g.com:2095/announce",
+        "tracker:http://bt.okmp3.ru:2710/announce",
+        "tracker:udp://tracker.torrent.eu.org:451/announce",
+        "tracker:http://tracker.mywaifu.best:6969/announce",
+        "tracker:udp://ttk2.nbaonlineservice.com:6969/announce",
+        "tracker:http://tracker.privateseedbox.xyz:2710/announce",
+        "tracker:udp://evan.im:6969/announce",
+        "dht:43ae6898e2b814e6526b0f1d6bf0aefa98e68147"
+      ],
+      "size": 4058744095,
+      "seeders": 4,
+      "quality": "1080p",
+      "languages": [
+        "Portuguese",
+        "English"
+      ],
+      "indexer": "starck_filmes",
+      "filename": "Homem-Aranha Um Novo Dia.2026.1080p.WEB-DL.x264.DUAL.5.1",
+      "releaseGroup": "starck_filmes",
+      "behaviorHints": {
+        "videoSize": 4058744095,
+        "notWebReady": true,
+        "realDebridReady": false,
+        "bingeGroup": "bludv|realdebrid|43ae6898e2b814e6526b0f1d6bf0aefa98e68147",
+        "fallbackMagnet": "magnet:?xt=urn:btih:43ae6898e2b814e6526b0f1d6bf0aefa98e68147&dn=Homem-Aranha%20Um%20Novo%20Dia.2026.1080p.WEB-DL.x264.DUAL.5.1&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce&tr=udp%3A%2F%2Fp4p.arenabg.com%3A1337%2Fannounce&tr=udp%3A%2F%2Fretracker.hotplug.ru%3A2710%2Fannounce&tr=http%3A%2F%2Ftracker.bt4g.com%3A2095%2Fannounce&tr=http%3A%2F%2Fbt.okmp3.ru%3A2710%2Fannounce&tr=udp%3A%2F%2Ftracker.torrent.eu.org%3A451%2Fannounce&tr=http%3A%2F%2Ftracker.mywaifu.best%3A6969%2Fannounce&tr=udp%3A%2F%2Fttk2.nbaonlineservice.com%3A6969%2Fannounce&tr=http%3A%2F%2Ftracker.privateseedbox.xyz%3A2710%2Fannounce&tr=udp%3A%2F%2Fevan.im%3A6969%2Fannounce",
+        "seeders": 4,
+        "indexer": "Bludv",
+        "publishDate": "2026-10-05T15:43:56.000Z",
+        "filename": "Homem-Aranha Um Novo Dia.2026.1080p.WEB-DL.x264.DUAL.5.1"
+      }
+    }
+  ]
+}

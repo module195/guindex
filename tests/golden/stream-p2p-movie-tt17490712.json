@@ -1,0 +1,259 @@
+{
+  "streams": [
+    {
+      "name": "GuIndex 🇺🇸\n1080p",
+      "title": "Mortal Kombat II (2026) [1080p] [YTS.BZ] WEB-DL x265",
+      "url": "magnet:?xt=urn:btih:DA86A10BEF2EE5B69476249796C9049402D9218C&dn=Mortal+Kombat+II+%282026%29+%5B1080p%5D+%5BYTS.BZ%5D&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce&tr=udp%3A%2F%2Ftracker.torrent.eu.org%3A451%2Fannounce&tr=udp%3A%2F%2Ftracker.dler.org%3A6969%2Fannounce&tr=udp%3A%2F%2Fopen.stealth.si%3A80%2Fannounce&tr=https%3A%2F%2Ftracker.moeblog.cn%3A443%2Fannounce&dk=2T7UkVkq7fP2OWF-FQ9ISjymmmD6oqDjd5gg-j0sYbWCaw&tr=https%3A%2F%2Ftracker.zhuqiy.com%3A443%2Fannounce&tr=udp%3A%2F%2Fp4p.arenabg.com%3A1337%2Fannounce&tr=udp%3A%2F%2Fretracker.hotplug.ru%3A2710%2Fannounce&tr=http%3A%2F%2Ftracker.bt4g.com%3A2095%2Fannounce&tr=http%3A%2F%2Fbt.okmp3.ru%3A2710%2Fannounce&tr=http%3A%2F%2Ftracker.mywaifu.best%3A6969%2Fannounce&tr=udp%3A%2F%2Fttk2.nbaonlineservice.com%3A6969%2Fannounce&tr=http%3A%2F%2Ftracker.privateseedbox.xyz%3A2710%2Fannounce&tr=udp%3A%2F%2Fevan.im%3A6969%2Fannounce",
+      "infoHash": "da86a10bef2ee5b69476249796c9049402d9218c",
+      "sources": [
+        "tracker:udp://tracker.opentrackr.org:1337/announce",
+        "tracker:udp://tracker.torrent.eu.org:451/announce",
+        "tracker:udp://tracker.dler.org:6969/announce",
+        "tracker:udp://open.stealth.si:80/announce",
+        "tracker:https://tracker.moeblog.cn:443/announce",
+        "tracker:https://tracker.zhuqiy.com:443/announce",
+        "tracker:udp://p4p.arenabg.com:1337/announce",
+        "tracker:udp://retracker.hotplug.ru:2710/announce",
+        "tracker:http://tracker.bt4g.com:2095/announce",
+        "tracker:http://bt.okmp3.ru:2710/announce",
+        "tracker:http://tracker.mywaifu.best:6969/announce",
+        "tracker:udp://ttk2.nbaonlineservice.com:6969/announce",
+        "tracker:http://tracker.privateseedbox.xyz:2710/announce",
+        "tracker:udp://evan.im:6969/announce",
+        "dht:da86a10bef2ee5b69476249796c9049402d9218c"
+      ],
+      "size": 1696512082,
+      "seeders": 47,
+      "quality": "1080p",
+      "languages": [
+        "English"
+      ],
+      "indexer": "rede_torrent",
+      "filename": "Mortal Kombat II (2026) [1080p] [YTS.BZ] ENG",
+      "releaseGroup": "rede_torrent",
+      "behaviorHints": {
+        "videoSize": 1696512082,
+        "notWebReady": true,
+        "realDebridReady": false,
+        "bingeGroup": "bludv|realdebrid|da86a10bef2ee5b69476249796c9049402d9218c",
+        "fallbackMagnet": "magnet:?xt=urn:btih:DA86A10BEF2EE5B69476249796C9049402D9218C&dn=Mortal+Kombat+II+%282026%29+%5B1080p%5D+%5BYTS.BZ%5D&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce&tr=udp%3A%2F%2Ftracker.torrent.eu.org%3A451%2Fannounce&tr=udp%3A%2F%2Ftracker.dler.org%3A6969%2Fannounce&tr=udp%3A%2F%2Fopen.stealth.si%3A80%2Fannounce&tr=https%3A%2F%2Ftracker.moeblog.cn%3A443%2Fannounce&dk=2T7UkVkq7fP2OWF-FQ9ISjymmmD6oqDjd5gg-j0sYbWCaw&tr=https%3A%2F%2Ftracker.zhuqiy.com%3A443%2Fannounce&tr=udp%3A%2F%2Fp4p.arenabg.com%3A1337%2Fannounce&tr=udp%3A%2F%2Fretracker.hotplug.ru%3A2710%2Fannounce&tr=http%3A%2F%2Ftracker.bt4g.com%3A2095%2Fannounce&tr=http%3A%2F%2Fbt.okmp3.ru%3A2710%2Fannounce&tr=http%3A%2F%2Ftracker.mywaifu.best%3A6969%2Fannounce&tr=udp%3A%2F%2Fttk2.nbaonlineservice.com%3A6969%2Fannounce&tr=http%3A%2F%2Ftracker.privateseedbox.xyz%3A2710%2Fannounce&tr=udp%3A%2F%2Fevan.im%3A6969%2Fannounce",
+        "seeders": 47,
+        "indexer": "Rede Torrent",
+        "publishDate": "2026-06-08T01:30:01.000Z",
+        "filename": "Mortal Kombat II (2026) [1080p] [YTS.BZ] ENG"
+      }
+    },
+    {
+      "name": "GuIndex 🇺🇸\n1080p",
+      "title": "Mortal Kombat II (2026) DCPRiP Better Audio.mkv WEB-DL 1080p",
+      "url": "magnet:?xt=urn:btih:95af14e4b2d9368c4685d725290389c8e195ec9a&dn=Mortal Kombat II (2026) DCPRiP Better Audio.mkv&xl=9783355964&tr=udp://tracker.opentrackr.org:1337/announce&tr=udp://open.demonii.com:1337/announce&tr=udp://open.stealth.si:80/announce&tr=udp://www.nartlof.com:6969/announce&tr=udp://vito-tracker.space:6969/announce&tr=udp://vito-tracker.duckdns.org:6969/announce&tr=udp://tracker.tryhackx.org:6969/announce&tr=udp://tracker.torrent.eu.org:451/announce&tr=http:// udp://tracker.theoks.net:6969/announce&tr=udp://tracker.t-1.org:6969/announce&tr=udp://tracker.startwork.cv:1337/announce&tr=udp://tracker.srv00.com:6969/announce&tr=udp://tracker.qu.ax:6969/announce&tr=udp://tracker.plx.im:6969/announce&tr=http:// udp://tracker.opentorrent.top:6969/announce&tr=udp://tracker.nyaa.vc:6969/announce&tr=udp://tracker.bluefrog.pw:2710/announce&tr=udp://tracker.auctor.tv:6969/announce&tr=udp://tracker.1h.is:1337/announce &tr=udp://tracker.004430.xyz:1337/announce&tr=udp%3A%2F%2Fp4p.arenabg.com%3A1337%2Fannounce&tr=udp%3A%2F%2Fretracker.hotplug.ru%3A2710%2Fannounce&tr=http%3A%2F%2Ftracker.bt4g.com%3A2095%2Fannounce&tr=http%3A%2F%2Fbt.okmp3.ru%3A2710%2Fannounce&tr=http%3A%2F%2Ftracker.mywaifu.best%3A6969%2Fannounce&tr=udp%3A%2F%2Fttk2.nbaonlineservice.com%3A6969%2Fannounce&tr=http%3A%2F%2Ftracker.privateseedbox.xyz%3A2710%2Fannounce&tr=udp%3A%2F%2Fevan.im%3A6969%2Fannounce",
+      "infoHash": "95af14e4b2d9368c4685d725290389c8e195ec9a",
+      "sources": [
+        "tracker:udp://tracker.opentrackr.org:1337/announce",
+        "tracker:udp://open.demonii.com:1337/announce",
+        "tracker:udp://open.stealth.si:80/announce",
+        "tracker:udp://www.nartlof.com:6969/announce",
+        "tracker:udp://vito-tracker.space:6969/announce",
+        "tracker:udp://vito-tracker.duckdns.org:6969/announce",
+        "tracker:udp://tracker.tryhackx.org:6969/announce",
+        "tracker:udp://tracker.torrent.eu.org:451/announce",
+        "tracker:http:// udp://tracker.theoks.net:6969/announce",
+        "tracker:udp://tracker.t-1.org:6969/announce",
+        "tracker:udp://tracker.startwork.cv:1337/announce",
+        "tracker:udp://tracker.srv00.com:6969/announce",
+        "tracker:udp://tracker.qu.ax:6969/announce",
+        "tracker:udp://tracker.plx.im:6969/announce",
+        "tracker:http:// udp://tracker.opentorrent.top:6969/announce",
+        "dht:95af14e4b2d9368c4685d725290389c8e195ec9a"
+      ],
+      "size": 9781788017,
+      "seeders": 84,
+      "quality": "1080p",
+      "languages": [
+        "English"
+      ],
+      "indexer": "starck_filmes",
+      "filename": "Mortal Kombat II (2026) DCPRiP Better Audio ENG.mkv",
+      "releaseGroup": "starck_filmes",
+      "behaviorHints": {
+        "videoSize": 9781788017,
+        "notWebReady": true,
+        "realDebridReady": false,
+        "bingeGroup": "bludv|realdebrid|95af14e4b2d9368c4685d725290389c8e195ec9a",
+        "fallbackMagnet": "magnet:?xt=urn:btih:95af14e4b2d9368c4685d725290389c8e195ec9a&dn=Mortal Kombat II (2026) DCPRiP Better Audio.mkv&xl=9783355964&tr=udp://tracker.opentrackr.org:1337/announce&tr=udp://open.demonii.com:1337/announce&tr=udp://open.stealth.si:80/announce&tr=udp://www.nartlof.com:6969/announce&tr=udp://vito-tracker.space:6969/announce&tr=udp://vito-tracker.duckdns.org:6969/announce&tr=udp://tracker.tryhackx.org:6969/announce&tr=udp://tracker.torrent.eu.org:451/announce&tr=http:// udp://tracker.theoks.net:6969/announce&tr=udp://tracker.t-1.org:6969/announce&tr=udp://tracker.startwork.cv:1337/announce&tr=udp://tracker.srv00.com:6969/announce&tr=udp://tracker.qu.ax:6969/announce&tr=udp://tracker.plx.im:6969/announce&tr=http:// udp://tracker.opentorrent.top:6969/announce&tr=udp://tracker.nyaa.vc:6969/announce&tr=udp://tracker.bluefrog.pw:2710/announce&tr=udp://tracker.auctor.tv:6969/announce&tr=udp://tracker.1h.is:1337/announce &tr=udp://tracker.004430.xyz:1337/announce&tr=udp%3A%2F%2Fp4p.arenabg.com%3A1337%2Fannounce&tr=udp%3A%2F%2Fretracker.hotplug.ru%3A2710%2Fannounce&tr=http%3A%2F%2Ftracker.bt4g.com%3A2095%2Fannounce&tr=http%3A%2F%2Fbt.okmp3.ru%3A2710%2Fannounce&tr=http%3A%2F%2Ftracker.mywaifu.best%3A6969%2Fannounce&tr=udp%3A%2F%2Fttk2.nbaonlineservice.com%3A6969%2Fannounce&tr=http%3A%2F%2Ftracker.privateseedbox.xyz%3A2710%2Fannounce&tr=udp%3A%2F%2Fevan.im%3A6969%2Fannounce",
+        "seeders": 84,
+        "indexer": "Bludv",
+        "publishDate": "2026-06-08T01:30:01.000Z",
+        "filename": "Mortal Kombat II (2026) DCPRiP Better Audio ENG.mkv"
+      }
+    },
+    {
+      "name": "GuIndex 🇺🇸\n720p",
+      "title": "Mortal Kombat II (2026) [720p] [YTS.BZ] WEB-DL",
+      "url": "magnet:?xt=urn:btih:C39D2F27D869A04307D98F0003F0CEF44742175D&dn=Mortal+Kombat+II+%282026%29+%5B720p%5D+%5BYTS.BZ%5D&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce&tr=udp%3A%2F%2Ftracker.torrent.eu.org%3A451%2Fannounce&tr=udp%3A%2F%2Ftracker.dler.org%3A6969%2Fannounce&tr=udp%3A%2F%2Fopen.stealth.si%3A80%2Fannounce&tr=https%3A%2F%2Ftracker.moeblog.cn%3A443%2Fannounce&dk=2T7UkVkq7fP2OWF-FQ9ISjymmmD6oqDjd5gg-j0sYbWCaw&tr=https%3A%2F%2Ftracker.zhuqiy.com%3A443%2Fannounce&tr=udp%3A%2F%2Fp4p.arenabg.com%3A1337%2Fannounce&tr=udp%3A%2F%2Fretracker.hotplug.ru%3A2710%2Fannounce&tr=http%3A%2F%2Ftracker.bt4g.com%3A2095%2Fannounce&tr=http%3A%2F%2Fbt.okmp3.ru%3A2710%2Fannounce&tr=http%3A%2F%2Ftracker.mywaifu.best%3A6969%2Fannounce&tr=udp%3A%2F%2Fttk2.nbaonlineservice.com%3A6969%2Fannounce&tr=http%3A%2F%2Ftracker.privateseedbox.xyz%3A2710%2Fannounce&tr=udp%3A%2F%2Fevan.im%3A6969%2Fannounce",
+      "infoHash": "c39d2f27d869a04307d98f0003f0cef44742175d",
+      "sources": [
+        "tracker:udp://tracker.opentrackr.org:1337/announce",
+        "tracker:udp://tracker.torrent.eu.org:451/announce",
+        "tracker:udp://tracker.dler.org:6969/announce",
+        "tracker:udp://open.stealth.si:80/announce",
+        "tracker:https://tracker.moeblog.cn:443/announce",
+        "tracker:https://tracker.zhuqiy.com:443/announce",
+        "tracker:udp://p4p.arenabg.com:1337/announce",
+        "tracker:udp://retracker.hotplug.ru:2710/announce",
+        "tracker:http://tracker.bt4g.com:2095/announce",
+        "tracker:http://bt.okmp3.ru:2710/announce",
+        "tracker:http://tracker.mywaifu.best:6969/announce",
+        "tracker:udp://ttk2.nbaonlineservice.com:6969/announce",
+        "tracker:http://tracker.privateseedbox.xyz:2710/announce",
+        "tracker:udp://evan.im:6969/announce",
+        "dht:c39d2f27d869a04307d98f0003f0cef44742175d"
+      ],
+      "size": 831520768,
+      "seeders": 95,
+      "quality": "720p",
+      "languages": [
+        "English"
+      ],
+      "indexer": "bludv_ru",
+      "filename": "Mortal Kombat II (2026) [720p] [YTS.BZ] ENG",
+      "releaseGroup": "bludv_ru",
+      "behaviorHints": {
+        "videoSize": 831520768,
+        "notWebReady": true,
+        "realDebridReady": false,
+        "bingeGroup": "bludv|realdebrid|c39d2f27d869a04307d98f0003f0cef44742175d",
+        "fallbackMagnet": "magnet:?xt=urn:btih:C39D2F27D869A04307D98F0003F0CEF44742175D&dn=Mortal+Kombat+II+%282026%29+%5B720p%5D+%5BYTS.BZ%5D&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce&tr=udp%3A%2F%2Ftracker.torrent.eu.org%3A451%2Fannounce&tr=udp%3A%2F%2Ftracker.dler.org%3A6969%2Fannounce&tr=udp%3A%2F%2Fopen.stealth.si%3A80%2Fannounce&tr=https%3A%2F%2Ftracker.moeblog.cn%3A443%2Fannounce&dk=2T7UkVkq7fP2OWF-FQ9ISjymmmD6oqDjd5gg-j0sYbWCaw&tr=https%3A%2F%2Ftracker.zhuqiy.com%3A443%2Fannounce&tr=udp%3A%2F%2Fp4p.arenabg.com%3A1337%2Fannounce&tr=udp%3A%2F%2Fretracker.hotplug.ru%3A2710%2Fannounce&tr=http%3A%2F%2Ftracker.bt4g.com%3A2095%2Fannounce&tr=http%3A%2F%2Fbt.okmp3.ru%3A2710%2Fannounce&tr=http%3A%2F%2Ftracker.mywaifu.best%3A6969%2Fannounce&tr=udp%3A%2F%2Fttk2.nbaonlineservice.com%3A6969%2Fannounce&tr=http%3A%2F%2Ftracker.privateseedbox.xyz%3A2710%2Fannounce&tr=udp%3A%2F%2Fevan.im%3A6969%2Fannounce",
+        "seeders": 95,
+        "indexer": "BluDV",
+        "publishDate": "2026-06-08T01:30:01.000Z",
+        "filename": "Mortal Kombat II (2026) [720p] [YTS.BZ] ENG"
+      }
+    },
+    {
+      "name": "GuIndex 🇺🇸\n1080p",
+      "title": "Mortal Kombat II (2026) [1080p] [YTS.BZ] WEB-DL",
+      "url": "magnet:?xt=urn:btih:57A70F38660D1CA80412DB09732695EB2F595A21&dn=Mortal+Kombat+II+%282026%29+%5B1080p%5D+%5BYTS.BZ%5D&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce&tr=udp%3A%2F%2Ftracker.torrent.eu.org%3A451%2Fannounce&tr=udp%3A%2F%2Ftracker.dler.org%3A6969%2Fannounce&tr=udp%3A%2F%2Fopen.stealth.si%3A80%2Fannounce&tr=https%3A%2F%2Ftracker.moeblog.cn%3A443%2Fannounce&dk=2T7UkVkq7fP2OWF-FQ9ISjymmmD6oqDjd5gg-j0sYbWCaw&tr=https%3A%2F%2Ftracker.zhuqiy.com%3A443%2Fannounce&tr=udp%3A%2F%2Fp4p.arenabg.com%3A1337%2Fannounce&tr=udp%3A%2F%2Fretracker.hotplug.ru%3A2710%2Fannounce&tr=http%3A%2F%2Ftracker.bt4g.com%3A2095%2Fannounce&tr=http%3A%2F%2Fbt.okmp3.ru%3A2710%2Fannounce&tr=http%3A%2F%2Ftracker.mywaifu.best%3A6969%2Fannounce&tr=udp%3A%2F%2Fttk2.nbaonlineservice.com%3A6969%2Fannounce&tr=http%3A%2F%2Ftracker.privateseedbox.xyz%3A2710%2Fannounce&tr=udp%3A%2F%2Fevan.im%3A6969%2Fannounce",
+      "infoHash": "57a70f38660d1ca80412db09732695eb2f595a21",
+      "sources": [
+        "tracker:udp://tracker.opentrackr.org:1337/announce",
+        "tracker:udp://tracker.torrent.eu.org:451/announce",
+        "tracker:udp://tracker.dler.org:6969/announce",
+        "tracker:udp://open.stealth.si:80/announce",
+        "tracker:https://tracker.moeblog.cn:443/announce",
+        "tracker:https://tracker.zhuqiy.com:443/announce",
+        "tracker:udp://p4p.arenabg.com:1337/announce",
+        "tracker:udp://retracker.hotplug.ru:2710/announce",
+        "tracker:http://tracker.bt4g.com:2095/announce",
+        "tracker:http://bt.okmp3.ru:2710/announce",
+        "tracker:http://tracker.mywaifu.best:6969/announce",
+        "tracker:udp://ttk2.nbaonlineservice.com:6969/announce",
+        "tracker:http://tracker.privateseedbox.xyz:2710/announce",
+        "tracker:udp://evan.im:6969/announce",
+        "dht:57a70f38660d1ca80412db09732695eb2f595a21"
+      ],
+      "size": 1889785610,
+      "seeders": 40,
+      "quality": "1080p",
+      "languages": [
+        "English"
+      ],
+      "indexer": "bludv_ru",
+      "filename": "Mortal Kombat II (2026) [1080p] [YTS.BZ] ENG",
+      "releaseGroup": "bludv_ru",
+      "behaviorHints": {
+        "videoSize": 1889785610,
+        "notWebReady": true,
+        "realDebridReady": false,
+        "bingeGroup": "bludv|realdebrid|57a70f38660d1ca80412db09732695eb2f595a21",
+        "fallbackMagnet": "magnet:?xt=urn:btih:57A70F38660D1CA80412DB09732695EB2F595A21&dn=Mortal+Kombat+II+%282026%29+%5B1080p%5D+%5BYTS.BZ%5D&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce&tr=udp%3A%2F%2Ftracker.torrent.eu.org%3A451%2Fannounce&tr=udp%3A%2F%2Ftracker.dler.org%3A6969%2Fannounce&tr=udp%3A%2F%2Fopen.stealth.si%3A80%2Fannounce&tr=https%3A%2F%2Ftracker.moeblog.cn%3A443%2Fannounce&dk=2T7UkVkq7fP2OWF-FQ9ISjymmmD6oqDjd5gg-j0sYbWCaw&tr=https%3A%2F%2Ftracker.zhuqiy.com%3A443%2Fannounce&tr=udp%3A%2F%2Fp4p.arenabg.com%3A1337%2Fannounce&tr=udp%3A%2F%2Fretracker.hotplug.ru%3A2710%2Fannounce&tr=http%3A%2F%2Ftracker.bt4g.com%3A2095%2Fannounce&tr=http%3A%2F%2Fbt.okmp3.ru%3A2710%2Fannounce&tr=http%3A%2F%2Ftracker.mywaifu.best%3A6969%2Fannounce&tr=udp%3A%2F%2Fttk2.nbaonlineservice.com%3A6969%2Fannounce&tr=http%3A%2F%2Ftracker.privateseedbox.xyz%3A2710%2Fannounce&tr=udp%3A%2F%2Fevan.im%3A6969%2Fannounce",
+        "seeders": 40,
+        "indexer": "BluDV",
+        "publishDate": "2026-06-08T01:30:01.000Z",
+        "filename": "Mortal Kombat II (2026) [1080p] [YTS.BZ] ENG"
+      }
+    },
+    {
+      "name": "GuIndex 🇧🇷 🇺🇸\n1080p",
+      "title": "Mortal.Kombat.2.2026.1080p.FULL.HD.WEB-DL.DUAL.5.1",
+      "url": "magnet:?xt=urn:btih:e9e1a33c466b7c83ecd5d5a7370406a2c462aaaf&dn=Mortal.Kombat.2.2026.1080p.FULL.HD.WEB-DL.DUAL.5.1&tr=udp%3A%2F%2Ftracker.openbittorrent.com%3A80%2Fannounce&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce&tr=udp%3A%2F%2Fp4p.arenabg.com%3A1337%2Fannounce&tr=udp%3A%2F%2Fretracker.hotplug.ru%3A2710%2Fannounce&tr=http%3A%2F%2Ftracker.bt4g.com%3A2095%2Fannounce&tr=http%3A%2F%2Fbt.okmp3.ru%3A2710%2Fannounce&tr=udp%3A%2F%2Ftracker.torrent.eu.org%3A451%2Fannounce&tr=http%3A%2F%2Ftracker.mywaifu.best%3A6969%2Fannounce&tr=udp%3A%2F%2Fttk2.nbaonlineservice.com%3A6969%2Fannounce&tr=http%3A%2F%2Ftracker.privateseedbox.xyz%3A2710%2Fannounce&tr=udp%3A%2F%2Fevan.im%3A6969%2Fannounce",
+      "infoHash": "e9e1a33c466b7c83ecd5d5a7370406a2c462aaaf",
+      "sources": [
+        "tracker:udp://tracker.openbittorrent.com:80/announce",
+        "tracker:udp://tracker.opentrackr.org:1337/announce",
+        "tracker:udp://p4p.arenabg.com:1337/announce",
+        "tracker:udp://retracker.hotplug.ru:2710/announce",
+        "tracker:http://tracker.bt4g.com:2095/announce",
+        "tracker:http://bt.okmp3.ru:2710/announce",
+        "tracker:udp://tracker.torrent.eu.org:451/announce",
+        "tracker:http://tracker.mywaifu.best:6969/announce",
+        "tracker:udp://ttk2.nbaonlineservice.com:6969/announce",
+        "tracker:http://tracker.privateseedbox.xyz:2710/announce",
+        "tracker:udp://evan.im:6969/announce",
+        "dht:e9e1a33c466b7c83ecd5d5a7370406a2c462aaaf"
+      ],
+      "size": 7752415969,
+      "seeders": 13,
+      "quality": "1080p",
+      "languages": [
+        "Portuguese",
+        "English"
+      ],
+      "indexer": "baixarapido",
+      "filename": "Mortal.Kombat.2.2026.1080p.FULL.HD.WEB-DL.DUAL.5.1",
+      "releaseGroup": "baixarapido",
+      "behaviorHints": {
+        "videoSize": 7752415969,
+        "notWebReady": true,
+        "realDebridReady": false,
+        "bingeGroup": "bludv|realdebrid|e9e1a33c466b7c83ecd5d5a7370406a2c462aaaf",
+        "fallbackMagnet": "magnet:?xt=urn:btih:e9e1a33c466b7c83ecd5d5a7370406a2c462aaaf&dn=Mortal.Kombat.2.2026.1080p.FULL.HD.WEB-DL.DUAL.5.1&tr=udp%3A%2F%2Ftracker.openbittorrent.com%3A80%2Fannounce&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce&tr=udp%3A%2F%2Fp4p.arenabg.com%3A1337%2Fannounce&tr=udp%3A%2F%2Fretracker.hotplug.ru%3A2710%2Fannounce&tr=http%3A%2F%2Ftracker.bt4g.com%3A2095%2Fannounce&tr=http%3A%2F%2Fbt.okmp3.ru%3A2710%2Fannounce&tr=udp%3A%2F%2Ftracker.torrent.eu.org%3A451%2Fannounce&tr=http%3A%2F%2Ftracker.mywaifu.best%3A6969%2Fannounce&tr=udp%3A%2F%2Fttk2.nbaonlineservice.com%3A6969%2Fannounce&tr=http%3A%2F%2Ftracker.privateseedbox.xyz%3A2710%2Fannounce&tr=udp%3A%2F%2Fevan.im%3A6969%2Fannounce",
+        "seeders": 13,
+        "indexer": "Baixa Rápido",
+        "publishDate": "2026-06-08T01:30:01.000Z",
+        "filename": "Mortal.Kombat.2.2026.1080p.FULL.HD.WEB-DL.DUAL.5.1"
+      }
+    },
+    {
+      "name": "GuIndex 🇧🇷 🇺🇸\n1080p",
+      "title": "Mortal Kombat 2 2026 WEB-DL 1080p x264 DUAL 5.1",
+      "url": "magnet:?xt=urn:btih:9e81214f51fa63342878e6a50f3019e422fe2924&dn=Mortal%20Kombat%202%202026%20WEB-DL%201080p%20x264%20DUAL%205.1&tr=udp%3A%2F%2Ftracker.openbittorrent.com%3A80%2Fannounce&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce&tr=udp%3A%2F%2Fp4p.arenabg.com%3A1337%2Fannounce&tr=udp%3A%2F%2Fretracker.hotplug.ru%3A2710%2Fannounce&tr=http%3A%2F%2Ftracker.bt4g.com%3A2095%2Fannounce&tr=http%3A%2F%2Fbt.okmp3.ru%3A2710%2Fannounce&tr=udp%3A%2F%2Ftracker.torrent.eu.org%3A451%2Fannounce&tr=http%3A%2F%2Ftracker.mywaifu.best%3A6969%2Fannounce&tr=udp%3A%2F%2Fttk2.nbaonlineservice.com%3A6969%2Fannounce&tr=http%3A%2F%2Ftracker.privateseedbox.xyz%3A2710%2Fannounce&tr=udp%3A%2F%2Fevan.im%3A6969%2Fannounce",
+      "infoHash": "9e81214f51fa63342878e6a50f3019e422fe2924",
+      "sources": [
+        "tracker:udp://tracker.openbittorrent.com:80/announce",
+        "tracker:udp://tracker.opentrackr.org:1337/announce",
+        "tracker:udp://p4p.arenabg.com:1337/announce",
+        "tracker:udp://retracker.hotplug.ru:2710/announce",
+        "tracker:http://tracker.bt4g.com:2095/announce",
+        "tracker:http://bt.okmp3.ru:2710/announce",
+        "tracker:udp://tracker.torrent.eu.org:451/announce",
+        "tracker:http://tracker.mywaifu.best:6969/announce",
+        "tracker:udp://ttk2.nbaonlineservice.com:6969/announce",
+        "tracker:http://tracker.privateseedbox.xyz:2710/announce",
+        "tracker:udp://evan.im:6969/announce",
+        "dht:9e81214f51fa63342878e6a50f3019e422fe2924"
+      ],
+      "size": 2952790016,
+      "seeders": 50,
+      "quality": "1080p",
+      "languages": [
+        "Portuguese",
+        "English"
+      ],
+      "indexer": "bludv_ru",
+      "filename": "Mortal Kombat 2 2026 WEB-DL 1080p x264 DUAL 5.1",
+      "releaseGroup": "bludv_ru",
+      "behaviorHints": {
+        "videoSize": 2952790016,
+        "notWebReady": true,
+        "realDebridReady": false,
+        "bingeGroup": "bludv|realdebrid|9e81214f51fa63342878e6a50f3019e422fe2924",
+        "fallbackMagnet": "magnet:?xt=urn:btih:9e81214f51fa63342878e6a50f3019e422fe2924&dn=Mortal%20Kombat%202%202026%20WEB-DL%201080p%20x264%20DUAL%205.1&tr=udp%3A%2F%2Ftracker.openbittorrent.com%3A80%2Fannounce&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce&tr=udp%3A%2F%2Fp4p.arenabg.com%3A1337%2Fannounce&tr=udp%3A%2F%2Fretracker.hotplug.ru%3A2710%2Fannounce&tr=http%3A%2F%2Ftracker.bt4g.com%3A2095%2Fannounce&tr=http%3A%2F%2Fbt.okmp3.ru%3A2710%2Fannounce&tr=udp%3A%2F%2Ftracker.torrent.eu.org%3A451%2Fannounce&tr=http%3A%2F%2Ftracker.mywaifu.best%3A6969%2Fannounce&tr=udp%3A%2F%2Fttk2.nbaonlineservice.com%3A6969%2Fannounce&tr=http%3A%2F%2Ftracker.privateseedbox.xyz%3A2710%2Fannounce&tr=udp%3A%2F%2Fevan.im%3A6969%2Fannounce",
+        "seeders": 50,
+        "indexer": "BluDV",
+        "publishDate": "2026-06-08T01:30:01.000Z",
+        "filename": "Mortal Kombat 2 2026 WEB-DL 1080p x264 DUAL 5.1"
+      }
+    }
+  ]
+}
