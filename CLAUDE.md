@@ -26,7 +26,7 @@ Addon Stremio em TypeScript (ESM, Fastify 5, Node ≥ 20.18) para conteúdo bras
 
 ## Contrato com o torrent-indexer
 
-Usa `GET /sources?v=2` (capacidades, tiers, saúde), `GET /indexers/multi`, `GET /indexers/<nome>` e `GET /search`. O lado Go é a fonte da verdade: leia o README dele ("API for aggregating clients") antes de mudar a integração.
+Usa `GET /sources?v=2` (capacidades, tiers, saúde), `GET /indexers/multi`, `GET /indexers/<nome>` e `GET /search`. O lado Go é a fonte da verdade: leia o README dele ("API for aggregating clients") antes de mudar a integração. Mudança que atravessa os dois repos segue a skill `mudar-contrato` do torrent-indexer.
 
 ## Regras
 
@@ -39,7 +39,7 @@ Usa `GET /sources?v=2` (capacidades, tiers, saúde), `GET /indexers/multi`, `GET
 ## Ferramentas do projeto (Claude Code)
 
 - Plugins (`.claude/settings.json`): typescript-lsp, security-guidance, pr-review-toolkit, commit-commands, claude-md-management, playwright, context7. O LSP precisa de `npm i -g typescript-language-server typescript`.
-- Hook: `eslint --fix` em cada `.ts` editado dentro de `src/` (só roda se `node_modules` existir).
+- Hooks: `eslint --fix` em cada `.ts` editado dentro de `src/` (só roda se `node_modules` existir); `proteger-arquivos.sh` bloqueia edição manual de `package-lock.json` (use `npm install`) e de `.env*` (menos `.env.example`).
 - Skills: `debrid-apis`, `contrato-aiostreams`. O MCP do Meilisearch/Redis fica no repo do torrent-indexer.
 
 ## Contexto extra
