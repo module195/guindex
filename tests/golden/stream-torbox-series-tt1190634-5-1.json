@@ -1,0 +1,109 @@
+{
+  "streams": [
+    {
+      "name": "[TB+] 🇧🇷 Example 1080p",
+      "title": "📂 The Boys S05E01 1080p WEB-DL DUAL\n📄 The.Boys.S05E01.1080p.mkv",
+      "url": "https://guindex.test/torbox/tok-0123456789/resolve?magnet=magnet%3A%3Fxt%3Durn%3Abtih%3A2222222222222222222222222222222222222222%26dn%3Dx&linkType=torrent&ctx=eyJ0eXBlIjoic2VyaWVzIiwic2Vhc29uIjo1LCJlcGlzb2RlIjoxLCJ0aXRsZSI6IlRoZS5Cb3lzLlMwNUUwMS4xMDgwcCIsInllYXIiOjIwMjZ9",
+      "infoHash": "2222222222222222222222222222222222222222",
+      "sources": [
+        "dht:2222222222222222222222222222222222222222"
+      ],
+      "size": 2147483648,
+      "seeders": 5,
+      "fileIdx": 0,
+      "quality": "1080p",
+      "languages": [
+        "Portuguese"
+      ],
+      "indexer": "betor",
+      "folderName": "x",
+      "filename": "The.Boys.S05E01.1080p.PT-BR.mkv",
+      "releaseGroup": "betor",
+      "behaviorHints": {
+        "videoSize": 2147483648,
+        "torboxReady": true,
+        "bingeGroup": "example|torbox|2222222222222222222222222222222222222222",
+        "seeders": 5,
+        "indexer": "BeTor",
+        "folderName": "x",
+        "folderSize": 2254857830,
+        "service": "torbox",
+        "cached": true,
+        "filename": "The.Boys.S05E01.1080p.PT-BR.mkv"
+      }
+    },
+    {
+      "name": "[TB⏳] 🇧🇷 Example 720p",
+      "title": "📂 The Boys S05 Completa 720p DUAL\n📄 The.Boys.S05E01.720p.mkv",
+      "url": "https://guindex.test/torbox/tok-0123456789/resolve?magnet=magnet%3A%3Fxt%3Durn%3Abtih%3A3333333333333333333333333333333333333333%26dn%3Dx&linkType=torrent&ctx=eyJ0eXBlIjoic2VyaWVzIiwic2Vhc29uIjo1LCJlcGlzb2RlIjoxLCJ0aXRsZSI6IlRoZS5Cb3lzLlMwNUUwMS43MjBwIiwieWVhciI6MjAyNn0",
+      "infoHash": "3333333333333333333333333333333333333333",
+      "sources": [
+        "dht:3333333333333333333333333333333333333333"
+      ],
+      "size": 1825361101,
+      "seeders": 5,
+      "fileIdx": 0,
+      "quality": "720p",
+      "languages": [
+        "Portuguese"
+      ],
+      "indexer": "betor",
+      "folderName": "x",
+      "filename": "The.Boys.S05E01.720p.PT-BR.mkv",
+      "releaseGroup": "betor",
+      "behaviorHints": {
+        "videoSize": 1825361101,
+        "torboxReady": false,
+        "notWebReady": true,
+        "bingeGroup": "example|torbox|3333333333333333333333333333333333333333",
+        "seeders": 5,
+        "indexer": "BeTor",
+        "folderName": "x",
+        "folderSize": 15032385536,
+        "service": "torbox",
+        "cached": false,
+        "filename": "The.Boys.S05E01.720p.PT-BR.mkv"
+      }
+    },
+    {
+      "name": "[TB⏳] 🇧🇷 🇺🇸 Bludv 1080p",
+      "title": "The.Boys.S05E01-02.1080p.WEB-DL.DUAL.5.1 (brazilian, eng) (2026)",
+      "url": "https://guindex.test/torbox/tok-0123456789/resolve?magnet=magnet%3A%3Fxt%3Durn%3Abtih%3A2f0d75179c730a14ca2c9739c2df337629b9cfa9%26dn%3DThe.Boys.S05E01-02.1080p.WEB-DL.DUAL.5.1%26tr%3Dudp%253a%252f%252ftracker.openbittorrent.com%253a80%252fannounce%26tr%3Dudp%253a%252f%252ftracker.opentrackr.org%253a1337%252fannounce%26tr%3Dudp%253A%252F%252Fp4p.arenabg.com%253A1337%252Fannounce%26tr%3Dudp%253A%252F%252Fretracker.hotplug.ru%253A2710%252Fannounce%26tr%3Dhttp%253A%252F%252Ftracker.bt4g.com%253A2095%252Fannounce%26tr%3Dhttp%253A%252F%252Fbt.okmp3.ru%253A2710%252Fannounce%26tr%3Dudp%253A%252F%252Ftracker.torrent.eu.org%253A451%252Fannounce%26tr%3Dhttp%253A%252F%252Ftracker.mywaifu.best%253A6969%252Fannounce%26tr%3Dudp%253A%252F%252Fttk2.nbaonlineservice.com%253A6969%252Fannounce%26tr%3Dhttp%253A%252F%252Ftracker.privateseedbox.xyz%253A2710%252Fannounce%26tr%3Dudp%253A%252F%252Fevan.im%253A6969%252Fannounce&linkType=torrent&ctx=eyJ0eXBlIjoic2VyaWVzIiwic2Vhc29uIjo1LCJlcGlzb2RlIjoxLCJ0aXRsZSI6IlRoZS5Cb3lzLlMwNUUwMS0wMi4xMDgwcC5XRUItREwuRFVBTC41LjEgKGJyYXppbGlhbiwgZW5nKSAoMjAyNikiLCJ5ZWFyIjoyMDI2fQ",
+      "infoHash": "2f0d75179c730a14ca2c9739c2df337629b9cfa9",
+      "sources": [
+        "tracker:udp://tracker.openbittorrent.com:80/announce",
+        "tracker:udp://tracker.opentrackr.org:1337/announce",
+        "tracker:udp://p4p.arenabg.com:1337/announce",
+        "tracker:udp://retracker.hotplug.ru:2710/announce",
+        "tracker:http://tracker.bt4g.com:2095/announce",
+        "tracker:http://bt.okmp3.ru:2710/announce",
+        "tracker:udp://tracker.torrent.eu.org:451/announce",
+        "tracker:http://tracker.mywaifu.best:6969/announce",
+        "tracker:udp://ttk2.nbaonlineservice.com:6969/announce",
+        "tracker:http://tracker.privateseedbox.xyz:2710/announce",
+        "tracker:udp://evan.im:6969/announce",
+        "dht:2f0d75179c730a14ca2c9739c2df337629b9cfa9"
+      ],
+      "seeders": 1,
+      "quality": "1080p",
+      "languages": [
+        "Portuguese",
+        "English"
+      ],
+      "indexer": "torrentfilmeshds",
+      "filename": "The.Boys.S05E01-02.1080p.WEB-DL.DUAL.5.1",
+      "releaseGroup": "torrentfilmeshds",
+      "behaviorHints": {
+        "torboxReady": false,
+        "notWebReady": true,
+        "bingeGroup": "bludv|torbox|2f0d75179c730a14ca2c9739c2df337629b9cfa9",
+        "seeders": 1,
+        "indexer": "Torrent Filmes HDs",
+        "publishDate": "2026-05-20T12:50:49.000Z",
+        "service": "torbox",
+        "cached": false,
+        "filename": "The.Boys.S05E01-02.1080p.WEB-DL.DUAL.5.1"
+      }
+    }
+  ]
+}

@@ -1,0 +1,99 @@
+[
+  {
+    "name": "GuIndex\n1080p",
+    "title": "The.Boys.S05E01-02.1080p.WEB-DL.DUAL.5.1 (brazilian, eng) (2026)\nSeeders: 1 | [Bludv]\n🇧🇷 / 🇺🇸",
+    "fileName": "The.Boys.S05E01-02.1080p.WEB-DL.DUAL.5.1 (brazilian, eng) (2026)",
+    "source": "Bludv",
+    "indexer": "torrentfilmeshds",
+    "indexerLabel": "Torrent Filmes HDs",
+    "magnet": "magnet:?xt=urn:btih:2f0d75179c730a14ca2c9739c2df337629b9cfa9&dn=The.Boys.S05E01-02.1080p.WEB-DL.DUAL.5.1&tr=udp%3a%2f%2ftracker.openbittorrent.com%3a80%2fannounce&tr=udp%3a%2f%2ftracker.opentrackr.org%3a1337%2fannounce&tr=udp%3A%2F%2Fp4p.arenabg.com%3A1337%2Fannounce&tr=udp%3A%2F%2Fretracker.hotplug.ru%3A2710%2Fannounce&tr=http%3A%2F%2Ftracker.bt4g.com%3A2095%2Fannounce&tr=http%3A%2F%2Fbt.okmp3.ru%3A2710%2Fannounce&tr=udp%3A%2F%2Ftracker.torrent.eu.org%3A451%2Fannounce&tr=http%3A%2F%2Ftracker.mywaifu.best%3A6969%2Fannounce&tr=udp%3A%2F%2Fttk2.nbaonlineservice.com%3A6969%2Fannounce&tr=http%3A%2F%2Ftracker.privateseedbox.xyz%3A2710%2Fannounce&tr=udp%3A%2F%2Fevan.im%3A6969%2Fannounce",
+    "detailUrl": "https://bludv.ru/the-boys-5a-temporada/",
+    "rawFileName": "The.Boys.S05E01-02.1080p.WEB-DL.DUAL.5.1",
+    "publishDate": "2026-05-20T12:50:49.000Z",
+    "languages": [
+      "Portuguese",
+      "English"
+    ],
+    "infoHash": "2f0d75179c730a14ca2c9739c2df337629b9cfa9",
+    "trackers": [
+      "udp://tracker.openbittorrent.com:80/announce",
+      "udp://tracker.opentrackr.org:1337/announce",
+      "udp://p4p.arenabg.com:1337/announce",
+      "udp://retracker.hotplug.ru:2710/announce",
+      "http://tracker.bt4g.com:2095/announce",
+      "http://bt.okmp3.ru:2710/announce",
+      "udp://tracker.torrent.eu.org:451/announce",
+      "http://tracker.mywaifu.best:6969/announce",
+      "udp://ttk2.nbaonlineservice.com:6969/announce",
+      "http://tracker.privateseedbox.xyz:2710/announce",
+      "udp://evan.im:6969/announce"
+    ],
+    "seeders": 1,
+    "quality": "1080p",
+    "context": {
+      "type": "series",
+      "season": 5,
+      "episode": 1,
+      "title": "The.Boys.S05E01-02.1080p.WEB-DL.DUAL.5.1 (brazilian, eng) (2026)",
+      "year": 2026
+    }
+  },
+  {
+    "name": "GuIndex\n1080p",
+    "title": "The.Boys.S05E01.1080p\nSeeders: 5 | Size: 2.0 GB | [Example]\n🇧🇷",
+    "fileName": "The Boys S05E01 1080p WEB-DL DUAL/The.Boys.S05E01.1080p.mkv",
+    "source": "Example",
+    "indexer": "betor",
+    "indexerLabel": "BeTor",
+    "magnet": "magnet:?xt=urn:btih:2222222222222222222222222222222222222222&dn=x",
+    "detailUrl": "https://example.invalid/222222",
+    "rawFileName": "The.Boys.S05E01.1080p.mkv",
+    "folderName": "x",
+    "folderSize": 2254857830,
+    "languages": [
+      "Portuguese"
+    ],
+    "filenameLanguageTag": "PT-BR",
+    "infoHash": "2222222222222222222222222222222222222222",
+    "fileIdx": 0,
+    "size": 2147483648,
+    "seeders": 5,
+    "quality": "1080p",
+    "context": {
+      "type": "series",
+      "season": 5,
+      "episode": 1,
+      "title": "The.Boys.S05E01.1080p",
+      "year": 2026
+    }
+  },
+  {
+    "name": "GuIndex\n720p",
+    "title": "The.Boys.S05E01.720p\nSeeders: 5 | Size: 1.7 GB | [Example]\n🇧🇷",
+    "fileName": "The Boys S05 Completa 720p DUAL/The.Boys.S05E01.720p.mkv",
+    "source": "Example",
+    "indexer": "betor",
+    "indexerLabel": "BeTor",
+    "magnet": "magnet:?xt=urn:btih:3333333333333333333333333333333333333333&dn=x",
+    "detailUrl": "https://example.invalid/333333",
+    "rawFileName": "The.Boys.S05E01.720p.mkv",
+    "folderName": "x",
+    "folderSize": 15032385536,
+    "languages": [
+      "Portuguese"
+    ],
+    "filenameLanguageTag": "PT-BR",
+    "infoHash": "3333333333333333333333333333333333333333",
+    "fileIdx": 0,
+    "size": 1825361101,
+    "seeders": 5,
+    "quality": "720p",
+    "context": {
+      "type": "series",
+      "season": 5,
+      "episode": 1,
+      "title": "The.Boys.S05E01.720p",
+      "year": 2026
+    }
+  }
+]
