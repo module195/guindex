@@ -1,5 +1,9 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "env": {
+    "ECC_DISABLED_HOOKS": "stop:desktop-notify,pre:observe:continuous-learning,stop:evaluate-session,stop:session-end,pre:compact,session:end:marker,stop:check-console-log",
+    "GATEGUARD_BASH_ROUTINE_DISABLED": "1"
+  },
   "enabledPlugins": {
     "typescript-lsp@claude-plugins-official": true,
     "security-guidance@claude-plugins-official": true,

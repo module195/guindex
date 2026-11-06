@@ -40,6 +40,7 @@ Usa `GET /sources?v=2` (capacidades, tiers, saúde), `GET /indexers/multi`, `GET
 
 - Plugins (`.claude/settings.json`): typescript-lsp, security-guidance, pr-review-toolkit, commit-commands, claude-md-management, playwright, context7. O LSP precisa de `npm i -g typescript-language-server typescript`.
 - Hooks: `eslint --fix` em cada `.ts` editado dentro de `src/` (só roda se `node_modules` existir); `proteger-arquivos.sh` bloqueia edição manual de `package-lock.json` (use `npm install`) e de `.env*` (menos `.env.example`).
+- ECC (plugin da conta): o `env` do `.claude/settings.json` desliga por `ECC_DISABLED_HOOKS` os hooks que só gravam estado local ou notificam o desktop (inúteis na nuvem) e o `stop:check-console-log` (o projeto loga com `console.*` de propósito), e alivia o GateGuard para Bash rotineiro (`GATEGUARD_BASH_ROUTINE_DISABLED=1`). O `stop:format-typecheck` do ECC continua ligado (typecheck dos `.ts` editados no fim da resposta).
 - Skills: `debrid-apis`, `contrato-aiostreams`. O MCP do Meilisearch/Redis fica no repo do torrent-indexer.
 
 ## Contexto extra
