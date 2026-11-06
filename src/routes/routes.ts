@@ -25,6 +25,9 @@ import {
   parseLibraryExtras
 } from '../services/torbox-library.js';
 
+/** Teto do token debrid aceito no /resolve (os reais têm dezenas de caracteres). */
+const MAX_DEBRID_TOKEN_LENGTH = 512;
+
 export function setupRoutes() {
   const config = ConfigService.loadConfig();
   // Atrás do proxy do Easypanel: req.ip vem do X-Forwarded-For, o IP do usuário
@@ -463,6 +466,13 @@ export function setupRoutes() {
 
         if (!token) {
           reply.status(400).send({ error: 'Debrid token is required' });
+          return;
+        }
+        // Tokens de RD/TorBox têm algumas dezenas de caracteres. Sem teto, cada
+        // token inventado (até ~16 KiB na query) ficava guardado no estado por
+        // token do RealDebridService.
+        if (typeof token !== 'string' || token.length > MAX_DEBRID_TOKEN_LENGTH) {
+          reply.status(400).send({ error: 'Invalid debrid token' });
           return;
         }
 
