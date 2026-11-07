@@ -94,7 +94,8 @@ export class RealDebridService {
     const parsed = Number.parseInt(process.env.RD_ACCOUNT_TORRENTS_DISABLE_MS ?? '', 10);
     return Number.isFinite(parsed) && parsed >= 0 ? parsed : 10 * 60 * 1000;
   })();
-  private static accountTorrentsDisabledUntil = new Map<string, number>();
+  /** Chave = token; com teto, porque 401/403 vem também de tokens inventados por anônimos */
+  private static accountTorrentsDisabledUntil = new BoundedMap<string, number>(500);
   /**
    * Arquivos que o RD recusou com infringing_file. O bloqueio vale para o
    * conteúdo, não para a conta, então a chave é hash + episódio, sem token.
@@ -281,8 +282,11 @@ export class RealDebridService {
     }
 
     const disabledUntil = this.accountTorrentsDisabledUntil.get(token);
-    if (disabledUntil !== undefined && now < disabledUntil) {
-      return new Map();
+    if (disabledUntil !== undefined) {
+      if (now < disabledUntil) {
+        return new Map();
+      }
+      this.accountTorrentsDisabledUntil.delete(token);
     }
     return undefined;
   }
