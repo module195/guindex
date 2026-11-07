@@ -356,6 +356,12 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
 
     // Biblioteca TorBox: a lista da conta sai já, em paralelo com a busca
     const libraryPromise = this.startAccountLibrary(options);
+    // Guarda a lista assim que ela chega: a busca sem resultado gasta o prazo
+    // todo, e sem isso a lista já pronta ficava de fora no fim.
+    let libraryReady: TorboxTorrent[] | undefined;
+    void libraryPromise?.then((items) => {
+      libraryReady = items;
+    });
 
     const reqId = Math.random().toString(36).substring(2, 8).toUpperCase();
     const context: MatchContext = {
@@ -521,7 +527,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
       // janela curta (dentro do prazo). Sem resposta, ela termina em segundo plano
       // e fica no cache da conta para o próximo pedido.
       const libraryWaitMs = Math.min(LIBRARY_WAIT_MS, Math.max(0, remainingMs()));
-      const libraryItems = await this.awaitWithin(libraryPromise, libraryWaitMs, undefined);
+      const libraryItems = libraryReady ?? (await this.awaitWithin(libraryPromise, libraryWaitMs, undefined));
       if (libraryItems === undefined) {
         logReq(context, `🗃️ Biblioteca TorBox sem resposta no prazo; fica para o próximo pedido`);
       } else {
