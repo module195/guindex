@@ -20,11 +20,16 @@ services:
       # - TORRENT_INDEXER_FAILURE_COOLDOWN_MS=300000
       # - TORRENT_INDEXER_GLOBAL_QUEUE_CONCURRENCY=1
       # - TORRENT_INDEXER_GLOBAL_QUEUE_DELAY_MS=1500
-      # OBRIGATÓRIO: defina o domínio público da sua instância
-      # - BASE_URL=https://seu-dominio.com
+      # BASE_URL (domínio público da instância) é OBRIGATÓRIA: defina no .env.
+      # Sem ela a imagem (NODE_ENV=production) não sobe.
     volumes:
       - ./public:/app/public:ro
     restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:7000/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) }).on('error', () => process.exit(1))"]
       interval: 30s

@@ -9,6 +9,13 @@ import { warnInvalidTimingConfig } from './services/timing-config.js';
 
 async function startServer() {
   const config = ConfigService.loadConfig();
+  // Sem BASE_URL os links saem da origem do pedido, montada a partir de
+  // Host/X-Forwarded-* (trustProxy), que o cliente controla. Em produção isso
+  // não é aceitável: a instância não sobe (Vercel e Render preenchem a URL).
+  if (config.baseUrlIsFallback && process.env.NODE_ENV === 'production') {
+    console.error('[GuIndex] ❌ BASE_URL é obrigatória com NODE_ENV=production. Defina a URL pública da instância.');
+    process.exit(1);
+  }
   warnInvalidTimingConfig();
   const fastify = setupRoutes();
 

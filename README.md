@@ -349,7 +349,7 @@ npm start
 | Variavel | Padrao | Descricao |
 |----------|--------|-----------|
 | `PORT` | `7000` | Porta do servidor |
-| `BASE_URL` | — | **(obrigatoria em prod)** URL publica da instancia |
+| `BASE_URL` | — | **(obrigatoria em prod)** URL publica da instancia. Com `NODE_ENV=production` (padrao da imagem Docker) o servidor nao sobe sem ela; na Vercel e no Render a URL da plataforma serve |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
 
 #### Torrent Indexer — conexao
