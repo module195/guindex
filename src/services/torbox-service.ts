@@ -56,6 +56,10 @@ interface AccountSnapshot {
   torrents: Map<string, number>;
   items: TorboxTorrent[];
   expires: number;
+  /** Hashes que já podem tocar (a biblioteca) */
+  readyHashes: Set<string>;
+  /** Muda quando a biblioteca ganha um torrent pronto; o cache do /stream compara com ela */
+  version: number;
 }
 
 /** Torrent da conta que já pode tocar: baixado (ou servido do cache do TorBox). */
@@ -93,6 +97,7 @@ export class TorboxService {
   private static readonly ACCOUNT_TORRENTS_TTL_MS = 2 * 60 * 1000;
   private static accountTorrents = new BoundedMap<string, AccountSnapshot>(500);
   private static accountTorrentsInFlight = new Map<string, Promise<AccountSnapshot>>();
+  private static accountVersionSeq = 0;
 
   private client: TorboxClient;
   private waitVideoUrl?: string;
@@ -394,6 +399,15 @@ export class TorboxService {
     return items.filter(isLibraryReady);
   }
 
+  /**
+   * Versão da biblioteca do token na última lista lida (vencida ou não), ou
+   * `undefined` sem lista. Sobe quando aparece um torrent pronto que a lista
+   * anterior não tinha.
+   */
+  static accountLibraryVersion(token: string): number | undefined {
+    return this.accountTorrents.get(token)?.version;
+  }
+
   /** Esquece a lista da conta do token: o próximo pedido busca de novo (ação "Atualizar"). */
   static forgetAccount(token: string): void {
     this.accountTorrents.delete(token);
@@ -424,16 +438,23 @@ export class TorboxService {
       .then((list) => {
         const torrents = new Map<string, number>();
         const items: TorboxTorrent[] = [];
+        const readyHashes = new Set<string>();
         for (const torrent of list) {
           if (torrent?.hash && typeof torrent.id === 'number') {
-            torrents.set(torrent.hash.toLowerCase(), torrent.id);
+            const hash = torrent.hash.toLowerCase();
+            torrents.set(hash, torrent.id);
             items.push(torrent);
+            if (isLibraryReady(torrent)) readyHashes.add(hash);
           }
         }
+        const previous = this.accountTorrents.get(token);
+        const grew = !previous || [...readyHashes].some((hash) => !previous.readyHashes.has(hash));
         const snapshot: AccountSnapshot = {
           torrents,
           items,
-          expires: Date.now() + TorboxService.ACCOUNT_TORRENTS_TTL_MS
+          expires: Date.now() + TorboxService.ACCOUNT_TORRENTS_TTL_MS,
+          readyHashes,
+          version: grew ? ++TorboxService.accountVersionSeq : previous.version
         };
         this.accountTorrents.set(token, snapshot);
         return snapshot;

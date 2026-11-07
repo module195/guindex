@@ -11,6 +11,7 @@ import { SourceService } from '../services/source-service.js';
 import { StreamService } from '../services/stream-service.js';
 import { ConfigService } from '../services/config-service.js';
 import { TorboxService } from '../services/torbox-service.js';
+import { LIBRARY_ENABLED, LIBRARY_WAIT_MS } from '../services/torbox-library.js';
 import { formatSteps, withPlaybackTiming } from '../services/playback-timing.js';
 import {
   DEBRID_MAX_WAIT_MS,
@@ -66,6 +67,8 @@ interface StreamCacheEntry {
   partial: boolean;
   /** Hashes que a busca achou (antes dos cortes da resposta) */
   sourceHashes?: Set<string>;
+  /** Versão da biblioteca TorBox quando a busca rodou (pedidos com token TorBox) */
+  libraryVersion?: number;
 }
 
 /** `have` tem todos os hashes de `need`; `null` são hashes desconhecidos. */
@@ -140,7 +143,13 @@ export class StreamController {
 
     const key = this.streamCacheKey(args);
     const now = Date.now();
-    const cached = StreamController.streamCache.get(key);
+    let cached = StreamController.streamCache.get(key);
+    if (cached && !args.extra?.forceFresh && (await this.libraryChangedSince(args, cached))) {
+      // Torrent novo pronto na conta: a resposta guardada não o tem
+      console.info(`[GuIndex] 🗃️ Biblioteca TorBox mudou; refazendo a busca: ${args.type}/${args.id}`);
+      StreamController.streamCache.delete(key);
+      cached = undefined;
+    }
     if (cached && !args.extra?.forceFresh) {
       if (now < cached.freshUntil) {
         console.info(`[GuIndex] ♻️ Stream do cache: ${args.type}/${args.id}`);
@@ -227,6 +236,35 @@ export class StreamController {
     return `private, max-age=${maxAge}, stale-while-revalidate=${stale}, stale-if-error=${stale}`;
   }
 
+  /** Token TorBox do pedido quando a biblioteca entra na busca. */
+  private libraryToken(args: StreamRequest): string | undefined {
+    if (!LIBRARY_ENABLED) return undefined;
+    const selection = StreamService.resolveDebridSelection({
+      query: {},
+      headers: {},
+      extra: args.extra,
+      env: StreamController.envDebridTokens()
+    });
+    return selection.provider === 'torbox' ? selection.token : undefined;
+  }
+
+  /**
+   * A biblioteca TorBox ganhou um torrent pronto depois da resposta guardada?
+   * Com a lista da conta vencida, relê (no máximo LIBRARY_WAIT_MS; sem resposta,
+   * a leitura segue em segundo plano e vale para o próximo pedido).
+   */
+  private async libraryChangedSince(args: StreamRequest, entry: StreamCacheEntry): Promise<boolean> {
+    const token = this.libraryToken(args);
+    if (!token) return false;
+    const reload = TorboxService.accountLibrary(token).catch((error) => {
+      console.warn(`[GuIndex] 🗃️ Falha ao reler a biblioteca TorBox: ${error instanceof Error ? error.message : String(error)}`);
+      return undefined;
+    });
+    await finishesWithin(reload, LIBRARY_WAIT_MS);
+    const version = TorboxService.accountLibraryVersion(token);
+    return version !== undefined && version !== entry.libraryVersion;
+  }
+
   private streamCacheKey(args: StreamRequest): string {
     const { type, id, extra } = args;
     const token = extra?.token ?? extra?.realdebridToken ?? extra?.torboxToken ?? '';
@@ -258,12 +296,14 @@ export class StreamController {
         const cache = StreamController.streamCache;
         const now = Date.now();
         const partial = StreamController.partialResponses.has(response);
+        const libraryToken = this.libraryToken(args);
         const entry: StreamCacheEntry = {
           response,
           freshUntil: partial ? now : now + STREAM_CACHE_TTL_MS,
           staleUntil: now + Math.max(STREAM_CACHE_TTL_MS, STREAM_CACHE_STALE_MS),
           partial,
-          sourceHashes
+          sourceHashes,
+          libraryVersion: libraryToken ? TorboxService.accountLibraryVersion(libraryToken) : undefined
         };
         // Quando a consulta ao debrid terminar, a parcial é remontada com as respostas
         const sources = partial ? StreamController.pendingSources.get(response) : undefined;

@@ -190,10 +190,14 @@ export class TorboxClient {
     );
   }
 
-  /** Torrents da conta (sem id); o mylist sem id devolve uma lista. */
+  /**
+   * Torrents da conta (sem id); o mylist sem id devolve uma lista. Sem
+   * bypass_cache o TorBox devolve a lista guardada dele, sem o torrent recém
+   * adicionado; o guindex já guarda a lista por 2 min por token.
+   */
   async listTorrents(limit = 1000): Promise<TorboxTorrent[]> {
     const data = await timeStep('lista_conta', () =>
-      this.get<TorboxTorrent[] | TorboxTorrent>('/v1/api/torrents/mylist', { limit })
+      this.get<TorboxTorrent[] | TorboxTorrent>('/v1/api/torrents/mylist', { limit, bypass_cache: true })
     );
     return Array.isArray(data) ? data : [];
   }
