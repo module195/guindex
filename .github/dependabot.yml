@@ -1,0 +1,12 @@
+# Mantém atualizados os SHAs das Actions e o digest da imagem base, que estão
+# fixados (ci.yml, Dockerfile).
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
