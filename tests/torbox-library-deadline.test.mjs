@@ -68,3 +68,37 @@ test('lista da conta pronta entra mesmo com a busca vazia esgotando o prazo', as
   assert.deepEqual(streams.map((s) => s.infoHash), [HASH], 'o torrent da conta sai sem a ajuda dos indexers');
   assert.equal(streams[0].inLibrary, true);
 });
+
+test('torrent-indexer fora do ar: o torrent da conta ainda sai', async (t) => {
+  // Porta fechada: toda chamada ao indexer falha na conexão
+  const closed = http.createServer();
+  await new Promise((resolve) => closed.listen(0, '127.0.0.1', resolve));
+  const port = closed.address().port;
+  await new Promise((resolve) => closed.close(resolve));
+
+  const originals = {
+    library: TorboxService.accountLibrary,
+    fetchCached: TorboxService.fetchCachedInfoHashes,
+    checkCached: TorboxService.checkCachedInfoHashes,
+  };
+  t.after(() => Object.assign(TorboxService, {
+    accountLibrary: originals.library,
+    fetchCachedInfoHashes: originals.fetchCached,
+    checkCachedInfoHashes: originals.checkCached,
+  }));
+  TorboxService.fetchCachedInfoHashes = async () => new Set();
+  TorboxService.checkCachedInfoHashes = async () => ({ cached: new Set(), unknown: new Set() });
+  const DOWN_HASH = 'f'.repeat(40);
+  TorboxService.accountLibrary = async () => [
+    { id: 10, hash: DOWN_HASH, name: 'The.Matrix.1999.2160p.WEB-DL.DUAL', size: 9e9, download_finished: true },
+  ];
+
+  TorrentIndexerProvider.cinemetaCache.set(`movie:${IMDB}`, { data: { name: 'Matrix', year: 1999 }, ts: Date.now() });
+  TorrentIndexerProvider.localizedTitleCache.set(IMDB, { ts: Date.now(), titles: ['Matrix'] });
+  const provider = new TorrentIndexerProvider('GuIndex', `http://127.0.0.1:${port}`);
+  const started = Date.now();
+  const streams = await provider.getStreams('movie', IMDB, { debridProvider: 'torbox', torboxToken: 'tok-0123456789' });
+  assert.ok(Date.now() - started < 2600, `respeita o prazo (${Date.now() - started}ms)`);
+  assert.deepEqual(streams.map((s) => s.infoHash), [DOWN_HASH]);
+  assert.equal(streams[0].inLibrary, true);
+});
