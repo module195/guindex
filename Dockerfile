@@ -1,7 +1,7 @@
 # Multi-stage build for production
 # Imagem fixada por digest (o Dependabot atualiza): uma tag pode ser
 # republicada com outro conteúdo.
-FROM node:22-alpine@sha256:0e1754758c2df4cfa3e68d59e2e1b7374bb7fd9ea6328eaaacf15cc934af8202 AS builder
+FROM node:25-alpine@sha256:bdf2cca6fe3dabd014ea60163eca3f0f7015fbd5c7ee1b0e9ccb4ced6eb02ef4 AS builder
 
 WORKDIR /app
 
@@ -13,7 +13,7 @@ RUN mkdir -p public
 RUN npm run build
 
 # ── Production ─────────────────────────────────────────────
-FROM node:22-alpine@sha256:0e1754758c2df4cfa3e68d59e2e1b7374bb7fd9ea6328eaaacf15cc934af8202 AS production
+FROM node:25-alpine@sha256:bdf2cca6fe3dabd014ea60163eca3f0f7015fbd5c7ee1b0e9ccb4ced6eb02ef4 AS production
 
 # Com NODE_ENV=production o servidor exige BASE_URL (ver src/server.ts)
 ENV NODE_ENV=production
