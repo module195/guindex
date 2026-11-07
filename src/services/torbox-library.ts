@@ -11,7 +11,7 @@ import type { TorboxTorrent } from './torbox-client.js';
 import { TorboxService } from './torbox-service.js';
 import { TorrentParser } from './torrent-parser.js';
 import { isVideoFile } from './file-selection.js';
-import { parseBoolean, readEnv } from './torrent-indexer-shared.js';
+import { parseBoolean, parseNonNegativeInt, readEnv } from './torrent-indexer-shared.js';
 
 export const LIBRARY_ID_PREFIX = 'gdxlib:';
 export const LIBRARY_CATALOG_ID = 'guindex.torbox.library';
@@ -21,6 +21,11 @@ const REFRESH_ID = `${LIBRARY_ID_PREFIX}action:refresh`;
 /** Busca maior que isso é cortada (a busca é em memória, mas não precisa de mais) */
 const MAX_SEARCH_LENGTH = 100;
 const SEARCH_THRESHOLD = 60;
+
+/** Biblioteca TorBox no /stream (itens da conta casados com o título). */
+export const LIBRARY_ENABLED = parseBoolean(readEnv('GUINDEX_TORBOX_LIBRARY'), true);
+/** Espera máxima pela lista da conta (depois da busca, ou antes de servir o /stream do cache) */
+export const LIBRARY_WAIT_MS = parseNonNegativeInt(readEnv('GUINDEX_TORBOX_LIBRARY_WAIT_MS'), 750);
 
 /** Catálogo da conta TorBox no manifest (com token TorBox). */
 export const LIBRARY_CATALOG_ENABLED = parseBoolean(readEnv('GUINDEX_TORBOX_LIBRARY_CATALOG'), true);

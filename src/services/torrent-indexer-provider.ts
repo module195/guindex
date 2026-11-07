@@ -50,7 +50,7 @@ import { BoundedMap } from '../utils/bounded-map.js';
 import { selectBestFile } from './file-selection.js';
 import { TorboxService } from './torbox-service.js';
 import type { TorboxTorrent } from './torbox-client.js';
-import { LIBRARY_INDEXER_LABEL } from './torbox-library.js';
+import { LIBRARY_ENABLED, LIBRARY_INDEXER_LABEL, LIBRARY_WAIT_MS } from './torbox-library.js';
 
 export { logReq } from './torrent-indexer-shared.js';
 const BACKGROUND_WARM_DELAY_MS = 2000;
@@ -120,13 +120,9 @@ class GlobalIndexerQueue {
 }
 
 const globalQueue = new GlobalIndexerQueue();
-/** Biblioteca TorBox no /stream (itens da conta casados com o título). */
-const LIBRARY_ENABLED = parseBoolean(readEnv('GUINDEX_TORBOX_LIBRARY'), true);
-/** Espera máxima pela lista da conta depois que a busca termina */
 // Folga além do PHASE3_MIN_MS ao cortar a espera do multi com o cache vazio,
 // para a Fase 3 não ficar de fora por poucos ms.
 const PHASE3_RESERVE_SLACK_MS = 100;
-const LIBRARY_WAIT_MS = parseNonNegativeInt(readEnv('GUINDEX_TORBOX_LIBRARY_WAIT_MS'), 750);
 /** Teto de streams novos vindos só da conta, por pedido */
 const MAX_LIBRARY_STREAMS = 20;
 
