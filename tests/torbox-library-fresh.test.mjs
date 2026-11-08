@@ -1,6 +1,7 @@
 // Torrent novo na conta TorBox aparece no /stream mesmo com a resposta do
 // título já guardada: a lista da conta vem sem o cache do TorBox
-// (bypass_cache) e uma biblioteca maior invalida a resposta guardada.
+// (bypass_cache) e uma biblioteca maior invalida a resposta guardada. O hit do
+// cache não espera a releitura da lista: o torrent novo aparece no pedido seguinte.
 // Roda contra o build: npm test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -64,6 +65,8 @@ TorrentIndexerProvider.localizedTitleCache.set(IMDB, { ts: Date.now(), titles: [
 const expireAccountList = () => {
   TorboxService.accountTorrents.get(TOKEN).expires = 0;
 };
+// Deixa a releitura em segundo plano terminar
+const settle = () => new Promise((resolve) => setTimeout(resolve, 50));
 
 test('torrent novo pronto na conta invalida a resposta guardada do título', async (t) => {
   const app = setupRoutes();
@@ -79,6 +82,7 @@ test('torrent novo pronto na conta invalida a resposta guardada do título', asy
 
   assert.deepEqual(await hashes(), [OLD.hash]);
   assert.equal(listQueries.at(-1).get('bypass_cache'), 'true', 'lista da conta sem o cache do TorBox');
+  await settle(); // o multi do 1º pedido termina em segundo plano
   const searches = searchCalls;
 
   assert.deepEqual(await hashes(), [OLD.hash]);
@@ -89,12 +93,46 @@ test('torrent novo pronto na conta invalida a resposta guardada do título', asy
   expireAccountList();
   const lists = listQueries.length;
   assert.deepEqual(await hashes(), [OLD.hash]);
+  await settle();
   assert.equal(listQueries.length, lists + 1, 'a lista vencida é relida');
+  assert.deepEqual(await hashes(), [OLD.hash]);
   assert.equal(searchCalls, searches, 'nada novo pronto: resposta do cache');
 
-  // Torrent novo pronto na conta: a busca roda de novo e ele aparece
+  // Torrent novo pronto na conta: o hit sai na hora com a resposta guardada e
+  // relê a lista em segundo plano; no pedido seguinte a busca roda e ele aparece
   account = [OLD, DOWNLOADING, NEW];
   expireAccountList();
+  assert.deepEqual(await hashes(), [OLD.hash], 'o hit não espera a releitura');
+  assert.equal(searchCalls, searches);
+  await settle();
   assert.deepEqual(await hashes(), [OLD.hash, NEW.hash]);
   assert.ok(searchCalls > searches, 'biblioteca maior refaz a busca');
+});
+
+test('hit do cache não espera releitura lenta da lista e loga quando ela falha', async (t) => {
+  const app = setupRoutes();
+  const originalLibrary = TorboxService.accountLibrary;
+  const originalWarn = console.warn;
+  const warns = [];
+  t.after(async () => {
+    TorboxService.accountLibrary = originalLibrary;
+    console.warn = originalWarn;
+    await app.close();
+  });
+  console.warn = (...args) => warns.push(args.join(' '));
+  TorboxService.accountLibrary = () =>
+    new Promise((_, reject) => setTimeout(() => reject(new Error('mylist lento')), 600));
+
+  const started = performance.now();
+  const res = await app.inject({ url: `/torbox/${TOKEN}/stream/movie/${IMDB}.json` });
+  const elapsed = performance.now() - started;
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.json().streams.map((s) => s.infoHash).sort(), [OLD.hash, NEW.hash]);
+  assert.ok(elapsed < 300, `hit levou ${Math.round(elapsed)} ms esperando a lista`);
+
+  await new Promise((resolve) => setTimeout(resolve, 650));
+  assert.ok(
+    warns.some((w) => w.includes('Falha ao reler a biblioteca TorBox') && w.includes('mylist lento')),
+    'a falha da releitura vai para o log',
+  );
 });

@@ -11,7 +11,7 @@ import { SourceService } from '../services/source-service.js';
 import { StreamService } from '../services/stream-service.js';
 import { ConfigService } from '../services/config-service.js';
 import { TorboxService } from '../services/torbox-service.js';
-import { LIBRARY_ENABLED, LIBRARY_WAIT_MS } from '../services/torbox-library.js';
+import { LIBRARY_ENABLED } from '../services/torbox-library.js';
 import { formatSteps, withPlaybackTiming } from '../services/playback-timing.js';
 import {
   DEBRID_MAX_WAIT_MS,
@@ -156,7 +156,7 @@ export class StreamController {
     const key = this.streamCacheKey(args);
     const now = Date.now();
     let cached = StreamController.streamCache.get(key);
-    if (cached && !args.extra?.forceFresh && (await this.libraryChangedSince(args, cached))) {
+    if (cached && !args.extra?.forceFresh && this.libraryChangedSince(args, cached)) {
       // Torrent novo pronto na conta: a resposta guardada não o tem
       console.info(`[GuIndex] 🗃️ Biblioteca TorBox mudou; refazendo a busca: ${args.type}/${args.id}`);
       StreamController.streamCache.delete(key);
@@ -269,17 +269,16 @@ export class StreamController {
 
   /**
    * A biblioteca TorBox ganhou um torrent pronto depois da resposta guardada?
-   * Com a lista da conta vencida, relê (no máximo LIBRARY_WAIT_MS; sem resposta,
-   * a leitura segue em segundo plano e vale para o próximo pedido).
+   * Compara com a última lista lida, sem esperar: com a lista da conta vencida,
+   * a releitura segue em segundo plano e um torrent novo aparece no pedido
+   * seguinte. Esperar por ela segurava cada hit até LIBRARY_WAIT_MS.
    */
-  private async libraryChangedSince(args: StreamRequest, entry: StreamCacheEntry): Promise<boolean> {
+  private libraryChangedSince(args: StreamRequest, entry: StreamCacheEntry): boolean {
     const token = this.libraryToken(args);
     if (!token) return false;
-    const reload = TorboxService.accountLibrary(token).catch((error) => {
+    void TorboxService.accountLibrary(token).catch((error) => {
       console.warn(`[GuIndex] 🗃️ Falha ao reler a biblioteca TorBox: ${error instanceof Error ? error.message : String(error)}`);
-      return undefined;
     });
-    await finishesWithin(reload, LIBRARY_WAIT_MS);
     const version = TorboxService.accountLibraryVersion(token);
     return version !== undefined && version !== entry.libraryVersion;
   }
