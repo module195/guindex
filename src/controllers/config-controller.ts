@@ -6,6 +6,25 @@
 import { LIBRARY_CATALOG_ENABLED, LIBRARY_ID_PREFIX, LIBRARY_TYPE, libraryCatalogManifestEntry } from '../services/torbox-library.js';
 import type { AddonManifest } from '../models/config-model.js';
 import { ConfigService } from '../services/config-service.js';
+import { createHash } from 'crypto';
+import { readFileSync } from 'fs';
+import path from 'path';
+
+/**
+ * Versão do config-page.js (hash do conteúdo) para a URL do script. O estático
+ * tem cache de 1 dia, então a URL precisa mudar quando o arquivo muda.
+ */
+function configPageScriptUrl(): string {
+  const file = path.resolve('public', 'config-page.js');
+  try {
+    const hash = createHash('sha256').update(readFileSync(file)).digest('hex').slice(0, 12);
+    return `/config-page.js?v=${hash}`;
+  } catch (error) {
+    console.warn(`[GuIndex] ⚠️ Não li ${file} para versionar o script; cache do navegador pode servir versão antiga:`, error);
+    return '/config-page.js';
+  }
+}
+const CONFIG_PAGE_SCRIPT_URL = configPageScriptUrl();
 
 const HTML_ESCAPES: Record<string, string> = {
   '&': '&amp;',
@@ -585,7 +604,7 @@ export class ConfigController {
 
   <div class="toast" id="toast"></div>
 
-  <script src="/config-page.js"></script>
+  <script src="${CONFIG_PAGE_SCRIPT_URL}"></script>
 </body>
 </html>`;
   }
