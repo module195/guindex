@@ -24,7 +24,7 @@ const SEARCH_THRESHOLD = 60;
 
 /** Biblioteca TorBox no /stream (itens da conta casados com o título). */
 export const LIBRARY_ENABLED = parseBoolean(readEnv('GUINDEX_TORBOX_LIBRARY'), true);
-/** Espera máxima pela lista da conta (depois da busca, ou antes de servir o /stream do cache) */
+/** Espera máxima pela lista da conta depois da busca (o /stream do cache não espera: relê em segundo plano) */
 export const LIBRARY_WAIT_MS = parseNonNegativeInt(readEnv('GUINDEX_TORBOX_LIBRARY_WAIT_MS'), 750);
 
 /** Catálogo da conta TorBox no manifest (com token TorBox). */
