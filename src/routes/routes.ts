@@ -28,6 +28,9 @@ import {
 /** Teto do token debrid aceito no /resolve (os reais têm dezenas de caracteres). */
 const MAX_DEBRID_TOKEN_LENGTH = 512;
 
+/** Cache HTTP dos arquivos de public/ (1 dia). */
+const STATIC_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
 export function setupRoutes() {
   const config = ConfigService.loadConfig();
   // Atrás do proxy do Easypanel: req.ip vem do X-Forwarded-For, o IP do usuário
@@ -43,8 +46,12 @@ export function setupRoutes() {
   });
 
   // Register static file plugin
+  // Estáticos com cache de 1 dia: imagens mudam raramente e o config-page.js vai
+  // com ?v=<hash do conteúdo> (config-controller), então deploy novo troca a URL.
+  // O /configure segue no-store e sempre aponta para a versão atual.
   fastify.register(import('@fastify/static'), {
-    root: path.resolve('public')
+    root: path.resolve('public'),
+    maxAge: STATIC_MAX_AGE_MS
   });
 
   // Modo privado (ADDON_ACCESS_KEY): sem a chave no caminho ou em ?key=, a
