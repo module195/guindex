@@ -58,7 +58,7 @@ export function debridApiToken(token: string, provider: Provider): string {
 }
 
 /** Caminhos que funcionam sem a chave: health check, vídeo de espera e arquivos estáticos. */
-const PUBLIC_PATHS = new Set(['/health', '/placeholder/downloading.mp4', '/config-page.js', '/logo.png', '/guindex-logo.png', '/favicon.ico']);
+const PUBLIC_PATHS = new Set(['/health', '/placeholder/downloading.mp4', '/config-page.js', '/logo.png', '/logo-144.jpg', '/guindex-logo.png', '/favicon.ico']);
 
 /**
  * O pedido leva a chave? Vale como segmento inteiro do caminho

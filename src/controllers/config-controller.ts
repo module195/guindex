@@ -135,7 +135,7 @@ export class ConfigController {
   <meta name="twitter:description" content="Configure e instale o GuIndex no Stremio.">
   <meta name="twitter:image" content="${baseUrl}/logo.png">
   <meta name="theme-color" content="#10b981">
-  <link rel="icon" type="image/png" href="/logo.png">
+  <link rel="icon" type="image/jpeg" href="/logo-144.jpg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -478,7 +478,7 @@ export class ConfigController {
   <div class="card">
     <div class="header">
       <div class="logo-wrap">
-        <img class="logo-mark" src="/logo.png" alt="GuIndex logo">
+        <img class="logo-mark" src="/logo-144.jpg" width="144" height="144" alt="GuIndex logo">
       </div>
       <div class="logo">Gu<span>Index</span></div>
       <div class="badge">v2.2.0 &bull; Open Source</div>
