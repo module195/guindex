@@ -136,9 +136,6 @@ export class ConfigController {
   <meta name="twitter:image" content="${baseUrl}/logo.png">
   <meta name="theme-color" content="#10b981">
   <link rel="icon" type="image/jpeg" href="/logo-144.jpg">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
     :root {
       --bg: #08080d;
@@ -156,7 +153,7 @@ export class ConfigController {
     }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      font-family: 'Inter', -apple-system, sans-serif;
+      font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
       background: var(--bg);
       color: var(--text);
       min-height: 100vh;
