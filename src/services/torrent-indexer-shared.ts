@@ -231,10 +231,10 @@ export const DEBRID_MAX_WAIT_MS = process.env.TORRENT_INDEXER_DEBRID_MAX_WAIT_MS
 export const MAX_CACHE_QUERIES = parsePositiveInt(process.env.TORRENT_INDEXER_CACHE_MAX_QUERIES, 8);
 export const CACHE_TIMEOUT_MS = parsePositiveInt(process.env.TORRENT_INDEXER_CACHE_TIMEOUT_MS, 3000);
 // Fase 2: com cache suficiente, quanto ainda esperar pelo multi antes de responder.
-export const MULTI_GRACE_MS = parseNonNegativeInt(process.env.TORRENT_INDEXER_MULTI_GRACE_MS, 1500);
+export const MULTI_GRACE_MS = parseNonNegativeInt(process.env.TORRENT_INDEXER_MULTI_GRACE_MS, 500);
 // Fase 2: cache suficiente mas sem nenhum 4K. O dump do betor traz muito 1080p e o
 // 4K costuma vir só do multi, que raspa em tempo real; vale esperar mais por ele.
-export const MULTI_GRACE_NO_4K_MS = parseNonNegativeInt(process.env.TORRENT_INDEXER_MULTI_GRACE_NO_4K_MS, 4000);
+export const MULTI_GRACE_NO_4K_MS = parseNonNegativeInt(process.env.TORRENT_INDEXER_MULTI_GRACE_NO_4K_MS, 1500);
 // Fase 3: tempo mínimo restante para valer a pena e máximo de queries.
 export const PHASE3_MIN_MS = parsePositiveInt(process.env.TORRENT_INDEXER_PHASE3_MIN_MS, 1500);
 export const PHASE3_MAX_QUERIES = parsePositiveInt(process.env.TORRENT_INDEXER_PHASE3_MAX_QUERIES, 3);
