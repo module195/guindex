@@ -17,7 +17,9 @@ import {
   DEBRID_MAX_WAIT_MS,
   REQUEST_BUDGET_MS,
   isLateResultsPending,
-  onLateResults
+  noteIncompleteSearch,
+  onLateResults,
+  searchIncompleteSince
 } from '../services/torrent-indexer-shared.js';
 
 // O orçamento do pedido (REQUEST_BUDGET_MS) é o mesmo da busca no torrent-indexer,
@@ -53,6 +55,14 @@ const parseNonNegativeInt = (value: string | undefined, fallback: number): numbe
 // nova voltar vazia, a antiga continua valendo (stale-if-error).
 const STREAM_CACHE_TTL_MS = parseNonNegativeInt(process.env.STREAM_CACHE_TTL_MS, 2 * 60 * 1000);
 const STREAM_CACHE_STALE_MS = parseNonNegativeInt(process.env.STREAM_CACHE_STALE_MS, 30 * 60 * 1000);
+// Cache negativo: resposta vazia de uma busca que terminou sem falha, corte de
+// orçamento nem multi atrasado pendente fica guardada por pouco tempo, sem
+// versão antiga para servir depois. Com qualquer falha no caminho, o vazio pode
+// ser falso e continua sem cache (no-store). 0 desliga.
+const STREAM_NEGATIVE_TTL_MS = Math.min(
+  parseNonNegativeInt(process.env.STREAM_NEGATIVE_TTL_MS, 45 * 1000),
+  STREAM_CACHE_TTL_MS
+);
 const STREAM_CACHE_MAX_ENTRIES = 500;
 // Link de CDN já resolvido: retomar, trocar de player ou o pedido de teste do
 // AIOStreams não refazem o caminho no debrid. Curto porque o link não é permanente.
@@ -124,6 +134,8 @@ export class StreamController {
   private static streamOrigins = new WeakMap<StremioStream, { hash: string; context?: StreamContext }>();
   /** Respostas montadas sem a checagem de cache do debrid completa */
   private static partialResponses = new WeakSet<StreamResponse>();
+  /** Vazias limpas, guardadas pelo cache negativo */
+  private static negativeResponses = new WeakSet<StreamResponse>();
   /**
    * Streams de origem de cada resposta parcial, enquanto a consulta ao debrid
    * segue em segundo plano e grava as respostas neles. Quando ela termina, a
@@ -223,6 +235,13 @@ export class StreamController {
    */
   static cacheControlFor(response: StreamResponse, title?: { type: string; id: string }): string {
     if (
+      StreamController.negativeResponses.has(response) &&
+      !(title !== undefined && isLateResultsPending(title.type, title.id))
+    ) {
+      // Sem stale-while-revalidate: passado o TTL curto, o cliente pergunta de novo
+      return `private, max-age=${Math.floor(STREAM_NEGATIVE_TTL_MS / 1000)}`;
+    }
+    if (
       STREAM_CACHE_TTL_MS === 0 ||
       response.streams.length === 0 ||
       StreamController.partialResponses.has(response) ||
@@ -283,6 +302,7 @@ export class StreamController {
     if (inFlight) {
       return inFlight;
     }
+    const startedAt = Date.now();
     const pending = this.computeStreams(args)
       .then((response) => {
         const sourceHashes = StreamController.sourceHashes.get(response);
@@ -292,7 +312,10 @@ export class StreamController {
           StreamController.outdatedResponses.add(response);
           return response;
         }
-        if (response.streams.length === 0) return response;
+        if (response.streams.length === 0) {
+          this.storeNegative(key, args, response, startedAt);
+          return response;
+        }
         const cache = StreamController.streamCache;
         const now = Date.now();
         const partial = StreamController.partialResponses.has(response);
@@ -337,6 +360,41 @@ export class StreamController {
       });
     StreamController.streamRefreshInFlight.set(key, pending);
     return pending;
+  }
+
+  /**
+   * Guarda a resposta vazia por STREAM_NEGATIVE_TTL_MS só quando nada na busca
+   * falhou ou ficou de fora desde `startedAt` e nenhum multi atrasado do título
+   * está pendente. Não substitui uma resposta com streams ainda servível.
+   */
+  private storeNegative(key: string, args: StreamRequest, response: StreamResponse, startedAt: number): void {
+    if (
+      STREAM_NEGATIVE_TTL_MS === 0 ||
+      StreamController.partialResponses.has(response) ||
+      searchIncompleteSince(startedAt) ||
+      isLateResultsPending(args.type, args.id)
+    ) {
+      return;
+    }
+    const cache = StreamController.streamCache;
+    const now = Date.now();
+    const existing = cache.get(key);
+    if (existing && existing.response.streams.length > 0 && now < existing.staleUntil) return;
+    const libraryToken = this.libraryToken(args);
+    cache.delete(key);
+    if (cache.size >= STREAM_CACHE_MAX_ENTRIES) {
+      const oldest = cache.keys().next().value;
+      if (oldest !== undefined) cache.delete(oldest);
+    }
+    cache.set(key, {
+      response,
+      freshUntil: now + STREAM_NEGATIVE_TTL_MS,
+      staleUntil: now + STREAM_NEGATIVE_TTL_MS,
+      partial: false,
+      sourceHashes: new Set(),
+      libraryVersion: libraryToken ? TorboxService.accountLibraryVersion(libraryToken) : undefined
+    });
+    StreamController.negativeResponses.add(response);
   }
 
   /**
@@ -461,6 +519,7 @@ export class StreamController {
       return response;
     } catch (error) {
       console.error(`Stream processing error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      noteIncompleteSearch();
       return { streams: [] };
     }
   }

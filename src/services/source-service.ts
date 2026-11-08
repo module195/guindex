@@ -6,7 +6,7 @@ import type { SourceStream } from '../models/source-model.js';
 import { SOURCES } from '../config/sources.js';
 import type { SourceFetchOptions } from './base-source-provider.js';
 import { prefetchDebridAvailability } from './debrid-prefetch.js';
-import { REQUEST_BUDGET_MS } from './torrent-indexer-shared.js';
+import { REQUEST_BUDGET_MS, noteIncompleteSearch } from './torrent-indexer-shared.js';
 
 // Timeout por provedor (ms). Padrão: o orçamento do pedido
 // (TORRENT_INDEXER_REQUEST_BUDGET_MS), para uma fonte lenta não segurar as
@@ -52,6 +52,7 @@ export class SourceService {
           return { source: source.name, streams };
         } catch (error) {
           console.warn(`[GuIndex] ❌ Falha crítica no provedor ${source.name}:`, error);
+          noteIncompleteSearch();
           return { source: source.name, streams: [] };
         }
       })

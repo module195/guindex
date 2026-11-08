@@ -45,6 +45,7 @@ import {
   PHASE3_MAX_QUERIES,
   IMDB_QUERY_REGEX,
   logReq,
+  noteIncompleteSearch,
 } from './torrent-indexer-shared.js';
 import { BoundedMap } from '../utils/bounded-map.js';
 import { selectBestFile } from './file-selection.js';
@@ -449,6 +450,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     //   respondeu, tenta as queries de texto que ele não cobriu; se não
     //   respondeu, repete também as do mid-path.
     // ═══════════════════════════════════════════════════════
+    if (streams.length === 0 && remainingMs() < PHASE3_MIN_MS) noteIncompleteSearch();
     if (streams.length === 0 && remainingMs() >= PHASE3_MIN_MS) {
       const extraQueries = textQueries.filter((q) => q && !midPathQueries.includes(q));
       const phase3Queries = (multiResults === undefined
@@ -487,6 +489,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
         streams.length === 0 ? Math.max(0, remainingMs()) : Math.min(META_BUDGET_MS, Math.max(0, remainingMs())),
         undefined,
       );
+      if (late === undefined) noteIncompleteSearch();
       const lateTitles = late
         ? [...new Set([...(late[1] ?? []), ...this.parser.collectMetaTitles(late[0])])].filter(Boolean)
         : [];
@@ -530,6 +533,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
       const libraryItems = libraryReady ?? (await this.awaitWithin(libraryPromise, libraryWaitMs, undefined));
       if (libraryItems === undefined) {
         logReq(context, `🗃️ Biblioteca TorBox sem resposta no prazo; fica para o próximo pedido`);
+        noteIncompleteSearch();
       } else {
         streams.push(...this.mergeAccountLibrary(libraryItems, streams, fallbackTitle, context, seen, sourceCounts));
       }
@@ -639,6 +643,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     const partial: TorrentLike[] = [];
     const search = this.fetchSearchResultsFromCandidates(queries, candidates, context, partial);
     const results = await this.awaitWithin(search, budgetMs, undefined);
+    if (results === undefined) noteIncompleteSearch();
     return results ?? this.parser.rankTorrentsByQuery([...partial], queries[0] ?? '');
   }
 
@@ -721,6 +726,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
       console.warn(
         `[TorrentIndexer] 🗃️ Falha ao listar a biblioteca TorBox: ${error instanceof Error ? error.message : String(error)}`,
       );
+      noteIncompleteSearch();
       return [];
     });
   }
@@ -973,6 +979,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
       if (response.statusCode >= 400) {
         await response.body.dump().catch(() => undefined);
         console.warn(`[GuIndex] ⚠️ /sources?v=2 respondeu HTTP ${response.statusCode}`);
+        noteIncompleteSearch();
         return undefined;
       }
       const payload = (await response.body.json()) as Record<string, unknown>;
@@ -980,6 +987,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
       return catalog && catalog.indexers.length > 0 ? catalog : undefined;
     } catch (error) {
       console.warn(`[GuIndex] ⚠️ /sources?v=2 falhou: ${error instanceof Error ? error.message : String(error)}`);
+      noteIncompleteSearch();
       return undefined;
     }
   }
@@ -1042,10 +1050,12 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
           });
           if (response.statusCode >= 400) {
             await response.body.dump().catch(() => undefined);
+            noteIncompleteSearch();
             return [];
           }
           return this.parser.normalizeTorrentPayload(await response.body.json());
         } catch {
+          noteIncompleteSearch();
           return [];
         }
       }),
@@ -1092,11 +1102,13 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
       if (response.statusCode >= 400) {
         await response.body.dump().catch(() => undefined);
         logReq(context, `⚠️ Multi-Search falhou: HTTP ${response.statusCode}`);
+        noteIncompleteSearch();
         return undefined;
       }
 
       const payload = (await response.body.json()) as Record<string, unknown>;
       if (!Array.isArray(payload?.results)) {
+        noteIncompleteSearch();
         return undefined;
       }
       const calls = Array.isArray(payload.calls) ? (payload.calls as MultiCall[]) : [];
@@ -1112,6 +1124,9 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
       }
 
       const countState = (state: string) => calls.filter((c) => c.state === state).length;
+      if (payload.partial === true || countState('error') + countState('timeout') + countState('skipped') > 0) {
+        noteIncompleteSearch();
+      }
       logReq(
         context,
         `📡 Multi-Search: ${results.length} torrents (ok=${countState('ok')}, erro=${countState('error')}, ` +
@@ -1120,6 +1135,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
       return this.parser.rankTorrentsByQuery(results, queries[0] ?? '');
     } catch (err) {
       logReq(context, `⚠️ Multi-Search falhou: ${err instanceof Error ? err.message : String(err)}`);
+      noteIncompleteSearch();
       return undefined;
     }
   }
@@ -1378,6 +1394,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     }
 
     if (state.cooldownUntil > Date.now()) {
+      noteIncompleteSearch();
       return true;
     }
 
@@ -1385,6 +1402,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
   }
 
   private recordIndexerFailure(indexerSlug: string): void {
+    noteIncompleteSearch();
     const current = TorrentIndexerProvider.indexerFailureState.get(indexerSlug);
     const nextFailures = (current?.consecutiveFailures ?? 0) + 1;
     const shouldCooldown = nextFailures >= TorrentIndexerProvider.INDEXER_FAILURE_THRESHOLD;
@@ -1455,6 +1473,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
       });
       if (response.statusCode >= 400) {
         await response.body.dump().catch(() => undefined);
+        noteIncompleteSearch();
         return undefined;
       }
 
@@ -1468,7 +1487,8 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
         return result;
       }
     } catch {
-      // Ignore Cinemeta errors
+      // Erro do Cinemeta não derruba a busca, mas ela fica incompleta.
+      noteIncompleteSearch();
     }
 
     return undefined;
@@ -1485,6 +1505,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
       ? TorrentIndexerProvider.LOCALIZED_TITLE_FAILURE_TTL_MS
       : TorrentIndexerProvider.LOCALIZED_TITLE_CACHE_TTL_MS;
     if (cached && Date.now() - cached.ts < cachedTtl) {
+      if (cached.failed) noteIncompleteSearch();
       return cached.titles;
     }
 
@@ -1560,6 +1581,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
   }
 
   private cacheLocalizedTitleFailure(imdbId: string, forceFresh: boolean): void {
+    noteIncompleteSearch();
     if (forceFresh) return;
     TorrentIndexerProvider.localizedTitleCache.set(imdbId, { ts: Date.now(), titles: [], failed: true });
   }

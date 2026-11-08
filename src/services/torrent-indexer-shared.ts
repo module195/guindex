@@ -378,3 +378,20 @@ export function notifyLateResults(type: string, id: string, hashes?: string[]): 
     }
   }
 }
+
+// Busca incompleta: upstream falhou, deu timeout, um indexer ficou de fora pelo
+// cooldown ou o orçamento cortou uma fase. Os erros viram lista vazia no caminho,
+// então quem decide se um "nenhum resultado" é de verdade (o cache negativo do
+// /stream) pergunta se houve problema desde que o pedido começou. É global de
+// propósito: uma busca compartilhada entre pedidos marca todos eles, e um
+// problema em outro título só faz um vazio deixar de ser guardado.
+let lastIncompleteSearchAt = 0;
+
+export function noteIncompleteSearch(): void {
+  lastIncompleteSearchAt = Date.now();
+}
+
+/** Alguma busca ficou incompleta a partir de `since` (ms de época)? */
+export function searchIncompleteSince(since: number): boolean {
+  return lastIncompleteSearchAt >= since;
+}
