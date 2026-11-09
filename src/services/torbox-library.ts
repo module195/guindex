@@ -305,7 +305,18 @@ export interface LibraryStream {
     videoSize?: number;
     folderSize?: number;
     notWebReady?: boolean;
+    /** Hash OpenSubtitles do arquivo; o Stremio repassa aos addons de legenda */
+    videoHash?: string;
   };
+}
+
+/**
+ * Hash OpenSubtitles: 64 bits em hex, 16 dígitos. Aceita sem zeros à esquerda
+ * e completa; outro formato é descartado.
+ */
+export function openSubtitlesHash(value: string | undefined): string | undefined {
+  const hash = value?.trim().toLowerCase();
+  return hash && /^[0-9a-f]{1,16}$/.test(hash) ? hash.padStart(16, '0') : undefined;
 }
 
 /** URL do resolve de um arquivo da conta: o play pede o link direto, sem createtorrent. */
@@ -348,5 +359,7 @@ export async function fetchLibraryStreams(token: string, id: string, resolveBase
   };
   if (item.hash) stream.infoHash = item.hash.toLowerCase();
   if (index >= 0) stream.fileIdx = index;
+  const videoHash = openSubtitlesHash(file?.opensubtitles_hash);
+  if (videoHash) stream.behaviorHints.videoHash = videoHash;
   return [stream];
 }
