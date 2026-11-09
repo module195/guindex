@@ -10,6 +10,8 @@ export interface StremioStreamBehaviorHints {
   bingeGroup?: string;
   filename?: string;
   videoSize?: number;
+  /** Hash OpenSubtitles do arquivo (16 hex); addons de legenda casam por ele */
+  videoHash?: string;
   // O AIOStreams só lê estes campos de behaviorHints em addons custom.
   seeders?: number;
   indexer?: string;
