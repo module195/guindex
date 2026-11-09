@@ -2,7 +2,7 @@
  * Torrent Indexer Source Provider
  */
 
-import { request } from 'undici';
+import { Agent, getGlobalDispatcher, request, type Dispatcher } from 'undici';
 import { BaseSourceProvider, type SourceFetchOptions } from './base-source-provider.js';
 import { prefetchDebridAvailability } from './debrid-prefetch.js';
 import type { SourceStream, StreamContext } from '../models/source-model.js';
@@ -59,6 +59,29 @@ const BACKGROUND_WARM_DELAY_MS = 2000;
 const CINEMETA_CACHE_MAX_ENTRIES = 2000;
 const SEARCH_CACHE_MAX_ENTRIES = 1000;
 const LOCALIZED_TITLE_CACHE_MAX_ENTRIES = 5000;
+
+
+// Conexões com o torrent-indexer: o keep-alive padrão do undici (4 s) fecha a
+// conexão entre um /stream e outro, e cada pedido após uma pausa pagava de novo
+// o handshake TCP+TLS (+0,3–0,45 s medidos pelo Cloudflare). 60 s fica abaixo
+// do IdleTimeout do servidor do torrent-indexer (120 s).
+const TORRENT_INDEXER_KEEP_ALIVE_MS = 60_000;
+const DEFAULT_GLOBAL_DISPATCHER = getGlobalDispatcher();
+let torrentIndexerAgent: Agent | undefined;
+
+/**
+ * Dispatcher das chamadas ao torrent-indexer. Um MockAgent/ProxyAgent definido
+ * com setGlobalDispatcher (testes, proxy) tem precedência sobre o Agent próprio.
+ */
+function torrentIndexerDispatcher(): Dispatcher {
+  const global = getGlobalDispatcher();
+  if (global !== DEFAULT_GLOBAL_DISPATCHER) return global;
+  torrentIndexerAgent ??= new Agent({
+    keepAliveTimeout: TORRENT_INDEXER_KEEP_ALIVE_MS,
+    keepAliveMaxTimeout: TORRENT_INDEXER_KEEP_ALIVE_MS,
+  });
+  return torrentIndexerAgent;
+}
 
 class GlobalIndexerQueue {
   private queue: Array<() => Promise<void>> = [];
@@ -458,20 +481,39 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
         : extraQueries
       ).slice(0, PHASE3_MAX_QUERIES);
       if (phase3Queries.length > 0) {
-        const [phase3Results, lateMulti] = await Promise.all([
-          this.fetchFastestIndexersSearch(phase3Queries, remainingMs(), context),
-          multiResults === undefined
-            ? this.awaitWithin(multiPromise, Math.max(0, remainingMs()), undefined)
-            : Promise.resolve(undefined),
-        ]);
-        if (lateMulti) {
-          multiResults = lateMulti;
-          addMultiResults(lateMulti);
+        const phase3Promise = this.fetchFastestIndexersSearch(phase3Queries, remainingMs(), context)
+          .catch((): TorrentLike[] => []);
+        const addPhase3Results = (results: TorrentLike[]) => {
+          fetchedTorrents.push(...results);
+          streams.push(
+            ...this.collectStreamsFromTorrents(results, fallbackTitle, context, seen, sourceCounts, 150),
+          );
+        };
+        if (multiResults === undefined) {
+          // O multi atrasado e a Fase 3 correm juntos. Se o multi chega primeiro
+          // com streams, a resposta sai com ele: a Fase 3 (indexers frios levam
+          // mais que o orçamento dela) segue em segundo plano e aquece o cache
+          // do torrent-indexer. Antes, a resposta esperava as duas.
+          const lateMultiPromise = this.awaitWithin(multiPromise, Math.max(0, remainingMs()), undefined);
+          const first = await Promise.race([
+            lateMultiPromise.then((results) => ({ phase: 'multi' as const, results })),
+            phase3Promise.then((results) => ({ phase: 'phase3' as const, results })),
+          ]);
+          const lateMulti = first.phase === 'multi' ? first.results : await lateMultiPromise;
+          if (lateMulti) {
+            multiResults = lateMulti;
+            addMultiResults(lateMulti);
+          }
+          if (first.phase === 'phase3') {
+            addPhase3Results(first.results);
+          } else if (streams.length === 0) {
+            addPhase3Results(await phase3Promise);
+          } else {
+            logReq(context, `⚡ [Fase 3] multi atrasado trouxe ${streams.length} streams; a resposta não espera a Fase 3`);
+          }
+        } else {
+          addPhase3Results(await phase3Promise);
         }
-        fetchedTorrents.push(...phase3Results);
-        streams.push(
-          ...this.collectStreamsFromTorrents(phase3Results, fallbackTitle, context, seen, sourceCounts, 150),
-        );
       }
     }
     if (multiResults === undefined) {
@@ -940,6 +982,15 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     return this.refreshIndexerCatalog();
   }
 
+  /**
+   * Busca o catálogo do /sources?v=2 no boot, para o 1º /stream não esperar por
+   * ele antes de enviar o multi (+0,66 s medidos). Falha não impede o boot: o
+   * pedido seguinte tenta de novo depois do CATALOG_RETRY_MS.
+   */
+  async warmUp(): Promise<void> {
+    if (!TorrentIndexerProvider.indexerCatalogCache) await this.refreshIndexerCatalog();
+  }
+
   private refreshIndexerCatalog(): Promise<IndexerCatalog | undefined> {
     const inFlight = TorrentIndexerProvider.indexerCatalogInFlight;
     if (inFlight) return inFlight;
@@ -973,6 +1024,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
   private async requestIndexerCatalog(): Promise<IndexerCatalog | undefined> {
     try {
       const response = await request(`${this.baseUrl}/sources?v=2`, {
+        dispatcher: torrentIndexerDispatcher(),
         signal: AbortSignal.timeout(TorrentIndexerProvider.CATALOG_TIMEOUT_MS),
         headers: { Accept: 'application/json' },
       });
@@ -1044,6 +1096,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
         }
         try {
           const response = await request(url.toString(), {
+            dispatcher: torrentIndexerDispatcher(),
             method: 'GET',
             headers: { Accept: 'application/json' },
             signal: AbortSignal.timeout(timeoutMs),
@@ -1089,6 +1142,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
 
     try {
       const response = await request(url.toString(), {
+        dispatcher: torrentIndexerDispatcher(),
         signal: AbortSignal.timeout(deadlineMs + 800),
         headers: { Accept: 'application/json' },
       });
@@ -1253,6 +1307,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
 
     try {
       const response = await request(url.toString(), {
+        dispatcher: torrentIndexerDispatcher(),
         signal: AbortSignal.timeout(TorrentIndexerProvider.FALLBACK_REQUEST_TIMEOUT_MS),
         headers: { Accept: 'application/json' },
       });
