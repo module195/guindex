@@ -42,6 +42,7 @@ import {
   markLateResultsPending,
   notifyLateResults,
   PHASE3_MIN_MS,
+  MULTI_RTT_MARGIN_MS,
   PHASE3_MAX_QUERIES,
   IMDB_QUERY_REGEX,
   logReq,
@@ -1129,8 +1130,15 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     budgetMs: number,
     context?: MatchContext,
   ): Promise<TorrentLike[] | undefined> {
-    // margem para a resposta voltar antes do deadline global do guindex
-    const deadlineMs = Math.max(500, budgetMs - 1000);
+    // O multi precisa responder antes de a Fase 2 desistir dele com o cache
+    // vazio (resto − PHASE3_MIN_MS − folga). Com o prazo antigo (orçamento −
+    // 1 s), o multi frio chegava logo depois desse corte e a resposta saía
+    // só no fim da Fase 3. As sub-chamadas que estourarem seguem no servidor
+    // e alimentam o cache do mesmo jeito.
+    const deadlineMs = Math.max(
+      500,
+      budgetMs - PHASE3_MIN_MS - PHASE3_RESERVE_SLACK_MS - MULTI_RTT_MARGIN_MS,
+    );
     const url = new URL(`${this.baseUrl}/indexers/multi`);
     for (const q of queries) {
       url.searchParams.append('q', q);
@@ -1143,7 +1151,10 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     try {
       const response = await request(url.toString(), {
         dispatcher: torrentIndexerDispatcher(),
-        signal: AbortSignal.timeout(deadlineMs + 800),
+        // O corte do cliente fica no horizonte antigo (orçamento − 200 ms), e
+        // não no deadline_ms: um multi que passe do prazo ainda pode chegar
+        // durante a Fase 3, que corre contra ele.
+        signal: AbortSignal.timeout(Math.max(deadlineMs + 800, budgetMs - 200)),
         headers: { Accept: 'application/json' },
       });
       if (response.statusCode === 404 || response.statusCode === 405) {
