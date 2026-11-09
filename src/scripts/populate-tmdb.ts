@@ -89,7 +89,9 @@ async function populateIndex() {
           console.log(`[Populate] 📡 Disparando busca para '${titlePTBR}'${imdbId ? ` (${imdbId})` : ''}: [${queries.join(', ')}]`);
           
           try {
-            const searchUrl = new URL(`${INDEXER_URL}/indexers/all`);
+            // /indexers/multi aceita vários q e aquece o cache de cada indexer.
+            // (rota inventada cai no catch-all "/" do torrent-indexer, que responde 200.)
+            const searchUrl = new URL(`${INDEXER_URL}/indexers/multi`);
             for (const q of queries) {
               searchUrl.searchParams.append('q', q);
             }
@@ -101,9 +103,13 @@ async function populateIndex() {
 
               if (searchRes.ok) {
                 const data = await searchRes.json();
-                const count = data.count !== undefined ? data.count : (Array.isArray(data) ? data.length : 0);
-                console.log(`  └─ ✅ Sucesso! Encontrados e cacheados: ${count}`);
-                successQueries++;
+                if (!Array.isArray(data?.results)) {
+                  console.log(`  └─ ⚠️ Resposta sem "results" (rota errada ou torrent-indexer antigo?)`);
+                } else {
+                  const count = typeof data.count === 'number' ? data.count : data.results.length;
+                  console.log(`  └─ ✅ Sucesso! Encontrados e cacheados: ${count}`);
+                  successQueries++;
+                }
               } else {
                 console.log(`  └─ ⚠️ Falha na busca (HTTP ${searchRes.status})`);
               }

@@ -8,6 +8,7 @@ import { prefetchDebridAvailability } from './debrid-prefetch.js';
 import type { SourceStream, StreamContext } from '../models/source-model.js';
 import { TorrentParser } from './torrent-parser.js';
 import { filenameLanguageTag } from './audio-language.js';
+import { readJsonCapped } from '../utils/read-capped.js';
 import type {
   CinemetaMeta,
   TorrentLike,
@@ -38,6 +39,7 @@ import {
   MAX_CACHE_QUERIES,
   CACHE_TIMEOUT_MS,
   MULTI_GRACE_MS,
+  TI_MAX_BODY_BYTES,
   MULTI_GRACE_NO_4K_MS,
   markLateResultsPending,
   notifyLateResults,
@@ -690,7 +692,10 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     return results ?? this.parser.rankTorrentsByQuery([...partial], queries[0] ?? '');
   }
 
-  /** Até 4 indexers com média abaixo de 1,3x a média geral; sem histórico, os 6 primeiros. */
+  /**
+   * Até 4 indexers com média abaixo de 1,3x a média geral, na ordem de
+   * compareIndexerPriority (sem histórico local: tier e p50_ms do catálogo).
+   */
   private pickFastestIndexers(indexers: string[]): string[] {
     const avgTimes = Array.from(TorrentIndexerProvider.indexerPerformance.values())
       .map((s) => s.avgMs)
@@ -1035,7 +1040,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
         noteIncompleteSearch();
         return undefined;
       }
-      const payload = (await response.body.json()) as Record<string, unknown>;
+      const payload = (await readJsonCapped(response.body, TI_MAX_BODY_BYTES)) as Record<string, unknown>;
       const catalog = this.parser.parseIndexerCatalog(payload);
       return catalog && catalog.indexers.length > 0 ? catalog : undefined;
     } catch (error) {
@@ -1107,7 +1112,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
             noteIncompleteSearch();
             return [];
           }
-          return this.parser.normalizeTorrentPayload(await response.body.json());
+          return this.parser.normalizeTorrentPayload(await readJsonCapped(response.body, TI_MAX_BODY_BYTES));
         } catch {
           noteIncompleteSearch();
           return [];
@@ -1171,7 +1176,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
         return undefined;
       }
 
-      const payload = (await response.body.json()) as Record<string, unknown>;
+      const payload = (await readJsonCapped(response.body, TI_MAX_BODY_BYTES)) as Record<string, unknown>;
       if (!Array.isArray(payload?.results)) {
         noteIncompleteSearch();
         return undefined;
@@ -1334,7 +1339,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
         return [];
       }
 
-      const payload = await response.body.json();
+      const payload = await readJsonCapped(response.body, TI_MAX_BODY_BYTES);
       const results = this.parser.normalizeTorrentPayload(payload);
       this.clearIndexerFailure(normalizedIndexer);
       this.recordIndexerPerformance(normalizedIndexer, Date.now() - startedAt, results.length);
@@ -1343,6 +1348,16 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
       this.recordIndexerFailure(normalizedIndexer);
       this.recordIndexerPerformance(normalizedIndexer, Date.now() - startedAt, 0);
       return [];
+    }
+  }
+
+  /** primary < secondary < desconhecido < reserve (reserva só depois dos demais). */
+  private static tierRank(tier: string | undefined): number {
+    switch (tier) {
+      case 'primary': return 0;
+      case 'secondary': return 1;
+      case 'reserve': return 3;
+      default: return 2;
     }
   }
 
@@ -1370,6 +1385,16 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
       return -1;
     } else if (statsB) {
       return 1;
+    } else {
+      // Sem histórico local (processo recém-iniciado): usa o que o
+      // torrent-indexer mede (/sources?v=2) — tier primeiro, depois p50_ms.
+      const capA = this.getIndexerCapability(a);
+      const capB = this.getIndexerCapability(b);
+      const tierDiff = TorrentIndexerProvider.tierRank(capA?.tier) - TorrentIndexerProvider.tierRank(capB?.tier);
+      if (tierDiff !== 0) return tierDiff;
+      const p50A = capA?.p50Ms ?? Number.POSITIVE_INFINITY;
+      const p50B = capB?.p50Ms ?? Number.POSITIVE_INFINITY;
+      if (p50A !== p50B) return p50A < p50B ? -1 : 1;
     }
 
     return a.localeCompare(b);
@@ -1391,14 +1416,18 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
   }
 
   private getDomainToIndexerMap(): Record<string, string> {
+    // Domínio (sem www, TLD, sufixo -vN, pontos e hífens) → indexer do
+    // torrent-indexer, para hosts que não batem com o nome do indexer. Os que
+    // batem (ex.: baixarapido.com) vêm do catálogo logo abaixo.
     const map: Record<string, string> = {
-      'torrentdosfilmes': 'torrent-dos-filmes',
+      'bludv': 'bludv_ru',
+      'bludvfilmes1': 'bludv_ru',
+      'redestorrents': 'rede_torrent',
       'starckfilmes': 'starck-filmes',
-      'vacatorrent': 'vaca_torrent',
-      'redetorrent': 'rede_torrent',
-      'comandotorrents': 'comando_torrents',
-      'bludv': 'bludv',
-      'filmetorrent': 'filme_torrent',
+      'catalogobetor': 'betor',
+      'torrentdosfilmes': 'torrent-dos-filmes',
+      'comando1': 'comando_torrents',
+      'torrentfilmehds': 'torrentfilmeshds',
     };
 
     const cachedNames = TorrentIndexerProvider.indexerNamesCache?.names;

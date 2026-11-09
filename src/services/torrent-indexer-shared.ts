@@ -92,6 +92,10 @@ export interface IndexerCapability {
   supportsText?: boolean;
   supportsImdb?: boolean;
   healthy: boolean;
+  /** primary | secondary | reserve (v=2); undefined = unknown */
+  tier?: string;
+  /** Median latency the torrent-indexer measured; seeds ordering before local history exists */
+  p50Ms?: number;
 }
 
 export interface IndexerCatalog {
@@ -241,6 +245,8 @@ export const PHASE3_MAX_QUERIES = parsePositiveInt(process.env.TORRENT_INDEXER_P
 // Fase 2: folga para a resposta do multi voltar (rede + JSON) antes do corte
 // da espera com o cache vazio. O deadline_ms enviado é o orçamento menos
 // PHASE3_MIN_MS, a folga da Fase 3 e esta margem.
+/** Teto de bytes por resposta do torrent-indexer (catálogo, multi, indexer, /search). */
+export const TI_MAX_BODY_BYTES = parsePositiveInt(process.env.TORRENT_INDEXER_MAX_BODY_BYTES, 8 * 1024 * 1024);
 export const MULTI_RTT_MARGIN_MS = parseNonNegativeInt(process.env.TORRENT_INDEXER_MULTI_RTT_MARGIN_MS, 300);
 export const IMDB_QUERY_REGEX = /^tt\d+$/i;
 // Sinais fortes de série, com fronteira de palavra. Fica de fora o que aparece em

@@ -111,6 +111,10 @@ export class TorrentParser {
           supportsText: typeof rec.supports_text === 'boolean' ? rec.supports_text : undefined,
           supportsImdb: typeof rec.supports_imdb === 'boolean' ? rec.supports_imdb : undefined,
           healthy: rec.healthy !== false,
+          tier: typeof rec.tier === 'string' && rec.tier ? rec.tier : undefined,
+          p50Ms: typeof rec.p50_ms === 'number' && Number.isFinite(rec.p50_ms) && rec.p50_ms >= 0
+            ? rec.p50_ms
+            : undefined,
         });
       }
       const features = payload.features as Record<string, unknown> | undefined;
