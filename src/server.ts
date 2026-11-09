@@ -6,6 +6,8 @@ import 'dotenv/config';
 import { setupRoutes } from './routes/routes.js';
 import { ConfigService } from './services/config-service.js';
 import { warnInvalidTimingConfig } from './services/timing-config.js';
+import { SOURCES } from './config/sources.js';
+import { TorrentIndexerProvider } from './services/torrent-indexer-provider.js';
 
 async function startServer() {
   const config = ConfigService.loadConfig();
@@ -26,6 +28,10 @@ async function startServer() {
     console.info(`[GuIndex] 🌐 Base URL: ${config.baseUrl}`);
     if (config.baseUrlIsFallback) {
       console.warn('[GuIndex] ⚠️ BASE_URL não definido: links e /configure usam a origem de cada pedido.');
+    }
+    // Catálogo dos indexers pronto antes do 1º /stream
+    for (const source of SOURCES) {
+      if (source instanceof TorrentIndexerProvider) void source.warmUp().catch(() => undefined);
     }
   } catch (error) {
     console.error('[GuIndex] ❌ Falha ao iniciar servidor:', error);

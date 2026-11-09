@@ -426,3 +426,59 @@ test('Fase 1: série manda season/episode só na query de IMDb', async (t) => {
     assert.equal(u.searchParams.get('season'), null, `texto não filtra: ${u.searchParams.get('q')}`);
   }
 });
+
+test('Fase 3: multi atrasado com streams responde sem esperar a Fase 3', async (t) => {
+  // Cache vazio: a Fase 2 desiste do multi em ~2,4 s (orçamento 3 s − Fase 3 mínima);
+  // o multi responde em 2,55 s e a Fase 3 (indexers lentos) só terminaria no prazo.
+  const srv = await startServer({
+    '/sources': async () => [200, SOURCES_V2],
+    '/search': async () => [200, { results: [] }],
+    '/indexers/multi': async () => {
+      await sleep(2550);
+      return [200, multiPayload([{ ...torrent(hash('c'), 'Matrix 1999 2160p'), found_in: ['comando_torrents'] }])];
+    },
+    '/indexers/*': async () => {
+      await sleep(5000);
+      return [200, { results: [torrent(hash('d'), 'Matrix 1999 1080p')] }];
+    },
+  });
+  t.after(srv.close);
+  const provider = new TorrentIndexerProvider('GuIndex', srv.base);
+
+  const startedAt = Date.now();
+  const streams = await provider.getStreams('movie', IMDB);
+  const elapsed = Date.now() - startedAt;
+  assert.equal(streams.length, 1, 'o 4K do multi chega na resposta');
+  assert.ok(srv.calls.some((u) => /^\/indexers\/(?!multi)/.test(u.pathname)), 'a Fase 3 rodou');
+  assert.ok(elapsed < 2850, `respondeu em ${elapsed}ms; antes esperava a Fase 3 até o prazo (~3000ms)`);
+});
+
+test('Fase 3: termina antes do multi atrasado e a resposta ainda junta o multi', async (t) => {
+  const srv = await startServer({
+    '/sources': async () => [200, SOURCES_V2],
+    '/search': async () => [200, { results: [] }],
+    '/indexers/multi': async () => {
+      await sleep(2550);
+      return [200, multiPayload([{ ...torrent(hash('c'), 'Matrix 1999 2160p'), found_in: ['comando_torrents'] }])];
+    },
+    // Mesmo hash em todas as chamadas da Fase 3: o dedup deixa um só stream.
+    '/indexers/*': async () => [200, { results: [torrent(hash('d'), 'Matrix 1999 1080p')] }],
+  });
+  t.after(srv.close);
+  const provider = new TorrentIndexerProvider('GuIndex', srv.base);
+
+  const streams = await provider.getStreams('movie', IMDB);
+  assert.equal(streams.length, 2, 'Fase 3 (1) + multi atrasado (1)');
+  assert.equal(streams[0].quality, '4K', 'o multi vem antes da Fase 3, como antes');
+});
+
+test('warmUp busca o catálogo uma vez, antes do 1º pedido', async (t) => {
+  const srv = await startServer({ '/sources': async () => [200, SOURCES_V2] });
+  t.after(srv.close);
+  const provider = new TorrentIndexerProvider('GuIndex', srv.base);
+
+  await provider.warmUp();
+  await provider.warmUp();
+  assert.equal(srv.calls.filter((u) => u.pathname === '/sources').length, 1);
+  assert.ok(TorrentIndexerProvider.indexerCatalogCache?.indexers.length > 0);
+});
