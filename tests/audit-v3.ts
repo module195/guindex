@@ -19,7 +19,7 @@
 import { writeFileSync, mkdirSync } from 'fs';
 
 const INDEXER_BASE = (process.env.TORRENT_INDEXER_URL || 'http://guindex.duckdns.org:8090').replace(/\/$/, '');
-const TMDB_KEY = '36630395ce8061b8a063643f3ddeabab';
+const TMDB_KEY = process.env.TMDB_API_KEY || '';
 const TIMEOUT = 20_000;
 
 const ACTIVE_INDEXERS = ['torrent-dos-filmes', 'rede_torrent', 'vaca_torrent', 'starck-filmes'];
@@ -135,6 +135,10 @@ async function fetchJSON(url: string): Promise<any> {
 }
 
 async function fetchTMDB(imdbId: string): Promise<{ title?: string; year?: number } | undefined> {
+  if (!TMDB_KEY) {
+    console.warn('[TMDB] TMDB_API_KEY ausente: pulando busca no TMDB');
+    return undefined;
+  }
   const data = await fetchJSON(`https://api.themoviedb.org/3/find/${imdbId}?external_source=imdb_id&language=pt-BR&api_key=${TMDB_KEY}`);
   if (!data) return undefined;
   const entries = [...(data.movie_results || []), ...(data.tv_results || [])];

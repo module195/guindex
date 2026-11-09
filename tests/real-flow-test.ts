@@ -12,8 +12,8 @@
  */
 
 const TORRENT_INDEXER_URL = process.env.TORRENT_INDEXER_URL || 'http://guindex.duckdns.org:8090';
-const TMDB_API_KEY = process.env.TMDB_API_KEY || '36630395ce8061b8a063643f3ddeabab';
-const TMDB_READ_TOKEN = process.env.TMDB_API_READ_ACCESS_TOKEN || 'eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiIzNjYzMDM5NWNlODA2MWI4YTA2MzY0M2YzZGRlYWJhYiIsIm5iZiI6MTYzNTkwNTAzMS45NzksInN1YiI6IjYxODFlZTA3ZmIzZjYxMDA2NWFhZDk5ZCIsInNjb3BlcyI6WyJhcGlfcmVhZCJdLCJ2ZXJzaW9uIjoxfQ.JBIB9Drq78FOfjfeeZeNICFM3ZYGsDdKBulzQDJNedY';
+const TMDB_API_KEY = process.env.TMDB_API_KEY || '';
+const TMDB_READ_TOKEN = process.env.TMDB_API_READ_ACCESS_TOKEN || '';
 
 interface TestCase {
   name: string;
@@ -80,6 +80,10 @@ async function fetchCinemeta(type: string, imdbId: string) {
 
 // ============== STEP 2: TMDB ==============
 async function fetchTMDB(imdbId: string) {
+  if (!TMDB_API_KEY) {
+    console.warn('  [TMDB] TMDB_API_KEY ausente: pulando busca no TMDB');
+    return [];
+  }
   const url = `https://api.themoviedb.org/3/find/${imdbId}?external_source=imdb_id&language=pt-BR&api_key=${TMDB_API_KEY}`;
   console.log(`  [TMDB] GET find/${imdbId}?language=pt-BR`);
   try {
