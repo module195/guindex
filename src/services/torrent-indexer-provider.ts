@@ -9,6 +9,7 @@ import type { SourceStream, StreamContext } from '../models/source-model.js';
 import { TorrentParser } from './torrent-parser.js';
 import { filenameLanguageTag } from './audio-language.js';
 import { readJsonCapped } from '../utils/read-capped.js';
+import { redactSecrets } from '../utils/redact-secrets.js';
 import type {
   CinemetaMeta,
   TorrentLike,
@@ -1614,7 +1615,8 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     const url = new URL(`https://api.themoviedb.org/3/find/${encodeURIComponent(normalizedImdb)}`);
     url.searchParams.set('external_source', 'imdb_id');
     url.searchParams.set('language', 'pt-BR');
-    if (apiKey) {
+    // A chave v3 só vai na query string; com o read token (v4) ela fica de fora.
+    if (apiKey && !readToken) {
       url.searchParams.set('api_key', apiKey);
     }
 
@@ -1663,7 +1665,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
       }
     } catch (error) {
       // Segue só com os títulos do Cinemeta; tenta o TMDB de novo depois do TTL curto.
-      console.warn(`[GuIndex] Falha ao consultar o TMDB para ${normalizedImdb}:`, (error as Error)?.message ?? error);
+      console.warn(`[GuIndex] Falha ao consultar o TMDB para ${normalizedImdb}:`, redactSecrets(error));
       this.cacheLocalizedTitleFailure(normalizedImdb, forceFresh);
       return [];
     }

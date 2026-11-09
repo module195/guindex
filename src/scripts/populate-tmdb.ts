@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { redactSecrets } from '../utils/redact-secrets.js';
 
 const TMDB_API_KEY = process.env.TMDB_API_KEY;
 const INDEXER_URL = process.env.TORRENT_INDEXER_URL || 'http://127.0.0.1:8090';
@@ -114,14 +115,14 @@ async function populateIndex() {
                 console.log(`  └─ ⚠️ Falha na busca (HTTP ${searchRes.status})`);
               }
           } catch (err) {
-            console.log(`  └─ ❌ Erro de requisição: ${err instanceof Error ? err.message : String(err)}`);
+            console.log(`  └─ ❌ Erro de requisição: ${redactSecrets(err)}`);
           }
 
           // Pausa maior já que agrupamos as queries, para dar tempo aos indexers respirarem
           await delay(3000);
         }
       } catch (err) {
-        console.error(`[Populate] ❌ Erro ao processar página ${page} de ${type}:`, err);
+        console.error(`[Populate] ❌ Erro ao processar página ${page} de ${type}:`, redactSecrets(err));
       }
     }
   }
