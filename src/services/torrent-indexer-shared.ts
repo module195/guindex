@@ -238,6 +238,10 @@ export const MULTI_GRACE_NO_4K_MS = parseNonNegativeInt(process.env.TORRENT_INDE
 // Fase 3: tempo mínimo restante para valer a pena e máximo de queries.
 export const PHASE3_MIN_MS = parsePositiveInt(process.env.TORRENT_INDEXER_PHASE3_MIN_MS, 1500);
 export const PHASE3_MAX_QUERIES = parsePositiveInt(process.env.TORRENT_INDEXER_PHASE3_MAX_QUERIES, 3);
+// Fase 2: folga para a resposta do multi voltar (rede + JSON) antes do corte
+// da espera com o cache vazio. O deadline_ms enviado é o orçamento menos
+// PHASE3_MIN_MS, a folga da Fase 3 e esta margem.
+export const MULTI_RTT_MARGIN_MS = parseNonNegativeInt(process.env.TORRENT_INDEXER_MULTI_RTT_MARGIN_MS, 300);
 export const IMDB_QUERY_REGEX = /^tt\d+$/i;
 // Sinais fortes de série, com fronteira de palavra. Fica de fora o que aparece em
 // nome de filme: "DTS5.1", "1920x1080", "Filme Completo", "Pack", "Collection",

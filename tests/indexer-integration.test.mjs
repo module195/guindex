@@ -136,7 +136,9 @@ test('mid-path usa /indexers/multi com indexers saudáveis e deadline_ms', async
   const sent = url.searchParams.get('indexers').split(',').sort();
   assert.deepEqual(sent, ['betor', 'comando_torrents', 'torrent-dos-filmes'], 'rede_torrent (healthy:false) fica de fora');
   const deadline = Number(url.searchParams.get('deadline_ms'));
-  assert.ok(deadline >= 6000 && deadline <= 7000, `deadline_ms=${deadline}`);
+  // orçamento 8000 − PHASE3_MIN_MS 1500 − folga 100 − margem de ida e volta 300:
+  // o multi responde antes de a Fase 2 desistir dele com o cache vazio
+  assert.ok(deadline >= 6000 && deadline <= 6100, `deadline_ms=${deadline}`);
 
   const perf = TorrentIndexerProvider.indexerPerformance;
   assert.equal(perf.get(provider.normalizeIndexerSlug('torrent-dos-filmes'))?.avgMs, 1200);
