@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
+
 /**
  * Tipos, configuração por env e helpers partilhados pelo provider do torrent-indexer
  * e pelo TorrentParser.
@@ -235,6 +237,13 @@ export const DEBRID_MAX_WAIT_MS = process.env.TORRENT_INDEXER_DEBRID_MAX_WAIT_MS
 export const MAX_CACHE_QUERIES = parsePositiveInt(process.env.TORRENT_INDEXER_CACHE_MAX_QUERIES, 8);
 export const CACHE_TIMEOUT_MS = parsePositiveInt(process.env.TORRENT_INDEXER_CACHE_TIMEOUT_MS, 3000);
 // Fase 2: com cache suficiente, quanto ainda esperar pelo multi antes de responder.
+// A Fase 1 decide pelas primeiras queries do Meilisearch (IMDb e título); as
+// outras entram se chegarem até CACHE_EXTRA_GRACE_MS depois delas.
+export const CACHE_PRIMARY_QUERIES = parsePositiveInt(process.env.TORRENT_INDEXER_CACHE_PRIMARY_QUERIES, 2);
+export const CACHE_EXTRA_GRACE_MS = parseNonNegativeInt(process.env.TORRENT_INDEXER_CACHE_EXTRA_GRACE_MS, 300);
+// Títulos que chegam depois do META_BUDGET disparam as buscas por texto se
+// sobrar pelo menos isto do prazo da busca.
+export const LATE_TEXT_MIN_MS = parsePositiveInt(process.env.TORRENT_INDEXER_LATE_TEXT_MIN_MS, 800);
 export const MULTI_GRACE_MS = parseNonNegativeInt(process.env.TORRENT_INDEXER_MULTI_GRACE_MS, 500);
 // Fase 2: cache suficiente mas sem nenhum 4K. O dump do betor traz muito 1080p e o
 // 4K costuma vir só do multi, que raspa em tempo real; vale esperar mais por ele.
@@ -389,19 +398,36 @@ export function notifyLateResults(type: string, id: string, hashes?: string[]): 
   }
 }
 
-// Busca incompleta: upstream falhou, deu timeout, um indexer ficou de fora pelo
-// cooldown ou o orçamento cortou uma fase. Os erros viram lista vazia no caminho,
-// então quem decide se um "nenhum resultado" é de verdade (o cache negativo do
-// /stream) pergunta se houve problema desde que o pedido começou. É global de
-// propósito: uma busca compartilhada entre pedidos marca todos eles, e um
-// problema em outro título só faz um vazio deixar de ser guardado.
+// Busca incompleta: upstream falhou, deu timeout, um indexer elegível ficou de
+// fora pelo cooldown, o orçamento cortou uma fase ou a busca saiu sem títulos.
+// Os erros viram lista vazia no caminho, então quem decide se um "nenhum
+// resultado" é de verdade (o cache negativo do /stream) pergunta se houve
+// problema naquele pedido. O sinal é por pedido (AsyncLocalStorage): antes era
+// um horário global, e um indexer no cooldown ou a falha de outro título
+// desligava o cache negativo de todos. Chamado fora de um pedido (aquecimento,
+// testes), cai no horário global.
+interface SearchHealth {
+  incomplete: boolean;
+}
+const searchHealth = new AsyncLocalStorage<SearchHealth>();
 let lastIncompleteSearchAt = 0;
 
 export function noteIncompleteSearch(): void {
-  lastIncompleteSearchAt = Date.now();
+  const health = searchHealth.getStore();
+  if (health) health.incomplete = true;
+  else lastIncompleteSearchAt = Date.now();
 }
 
-/** Alguma busca ficou incompleta a partir de `since` (ms de época)? */
+/**
+ * Roda `fn` com um sinal de busca incompleta próprio. Tudo o que `fn` dispara,
+ * inclusive em segundo plano, marca esse sinal, e não o dos outros pedidos.
+ */
+export function runWithSearchHealth<T>(fn: () => Promise<T>): { done: Promise<T>; incomplete: () => boolean } {
+  const health: SearchHealth = { incomplete: false };
+  return { done: searchHealth.run(health, fn), incomplete: () => health.incomplete };
+}
+
+/** Alguma busca fora de pedido ficou incompleta a partir de `since` (ms de época)? */
 export function searchIncompleteSince(since: number): boolean {
   return lastIncompleteSearchAt >= since;
 }

@@ -19,7 +19,7 @@ import {
   isLateResultsPending,
   noteIncompleteSearch,
   onLateResults,
-  searchIncompleteSince
+  runWithSearchHealth
 } from '../services/torrent-indexer-shared.js';
 
 // O orçamento do pedido (REQUEST_BUDGET_MS) é o mesmo da busca no torrent-indexer,
@@ -301,8 +301,8 @@ export class StreamController {
     if (inFlight) {
       return inFlight;
     }
-    const startedAt = Date.now();
-    const pending = this.computeStreams(args)
+    const search = runWithSearchHealth(() => this.computeStreams(args));
+    const pending = search.done
       .then((response) => {
         const sourceHashes = StreamController.sourceHashes.get(response);
         const late = StreamController.outdatedRefreshes.get(key);
@@ -312,7 +312,7 @@ export class StreamController {
           return response;
         }
         if (response.streams.length === 0) {
-          this.storeNegative(key, args, response, startedAt);
+          this.storeNegative(key, args, response, search.incomplete());
           return response;
         }
         const cache = StreamController.streamCache;
@@ -362,23 +362,28 @@ export class StreamController {
   }
 
   /**
-   * Guarda a resposta vazia por STREAM_NEGATIVE_TTL_MS só quando nada na busca
-   * falhou ou ficou de fora desde `startedAt` e nenhum multi atrasado do título
+   * Guarda a resposta vazia por STREAM_NEGATIVE_TTL_MS só quando nada nesta busca
+   * falhou ou ficou de fora (`incomplete`) e nenhum multi atrasado do título
    * está pendente. Não substitui uma resposta com streams ainda servível.
    */
-  private storeNegative(key: string, args: StreamRequest, response: StreamResponse, startedAt: number): void {
-    if (
-      STREAM_NEGATIVE_TTL_MS === 0 ||
-      StreamController.partialResponses.has(response) ||
-      searchIncompleteSince(startedAt) ||
-      isLateResultsPending(args.type, args.id)
-    ) {
+  private storeNegative(key: string, args: StreamRequest, response: StreamResponse, incomplete: boolean): void {
+    if (STREAM_NEGATIVE_TTL_MS === 0 || StreamController.partialResponses.has(response)) return;
+    const reason = incomplete
+      ? 'busca incompleta'
+      : isLateResultsPending(args.type, args.id)
+        ? 'multi atrasado pendente'
+        : undefined;
+    if (reason) {
+      console.info(`[GuIndex] 🕳️ Vazio fora do cache negativo (${reason}): ${args.type}/${args.id}`);
       return;
     }
     const cache = StreamController.streamCache;
     const now = Date.now();
     const existing = cache.get(key);
     if (existing && existing.response.streams.length > 0 && now < existing.staleUntil) return;
+    console.info(
+      `[GuIndex] 🕳️ Vazio guardado no cache negativo por ${Math.floor(STREAM_NEGATIVE_TTL_MS / 1000)}s: ${args.type}/${args.id}`
+    );
     const libraryToken = this.libraryToken(args);
     cache.delete(key);
     if (cache.size >= STREAM_CACHE_MAX_ENTRIES) {
@@ -704,10 +709,14 @@ export class StreamController {
       return cached.url;
     }
 
-    let pending = StreamController.playbackInFlight.get(key);
+    // O resolve em andamento é por conta e item, sem o IP: dois aparelhos da
+    // mesma conta apertando play juntos esperam o mesmo resolve, em vez de
+    // criar o torrent duas vezes. O link pronto continua guardado por IP (CDN).
+    const flightKey = StreamController.playbackKey({ ...params, userIp: undefined });
+    let pending = StreamController.playbackInFlight.get(flightKey);
     if (!pending) {
-      pending = this.timedResolvePlayback(params).finally(() => StreamController.playbackInFlight.delete(key));
-      StreamController.playbackInFlight.set(key, pending);
+      pending = this.timedResolvePlayback(params).finally(() => StreamController.playbackInFlight.delete(flightKey));
+      StreamController.playbackInFlight.set(flightKey, pending);
     }
     const result = await pending;
     // O vídeo de espera não fica guardado: o próximo play tenta de novo

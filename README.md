@@ -366,6 +366,7 @@ npm start
 | `STREMIO_ADDON_SOURCES` | `[]` | Lista JSON de addons extras no formato `[{"name":"Name","url":"https://example.com/manifest.json"}]` (opcional) |
 | `STREMIO_ADDON_TIMEOUT_MS` | orçamento − margem do debrid (6500) | Prazo do pedido a cada addon externo; passou disso, o addon é cortado e os outros streams seguem |
 | `SOURCE_TIMEOUT_MS` | `TORRENT_INDEXER_REQUEST_BUDGET_MS` (8000) | Prazo de cada fonte no agregador; `0` desliga |
+| `SOURCE_GRACE_MS` | `1000` | Quando o GuIndex responde com streams, quanto o agregador ainda espera os addons externos antes de responder; `0` espera todos |
 | `TORRENT_INDEXER_DEBRID_MAX_WAIT_MS` | — (até o fim do orçamento) | Teto da espera do `/stream` pela consulta de cache do debrid; com o debrid lento, responde mais cedo, sem o selo. `0` não espera (usa só o que o cache de disponibilidade já sabe) |
 | `RD_BLOCKED_TTL_MS` | `86400000` (24 h) | Por quanto tempo um arquivo recusado pelo Real-Debrid (infringing_file) fica escondido; `0` desliga |
 | `STREAM_CACHE_TTL_MS` | `120000` (2 min) | Por quanto tempo a resposta do `/stream` sai do cache sem nova busca; `0` desliga o cache |
@@ -380,6 +381,9 @@ npm start
 | `TORRENT_INDEXER_FALLBACK_CONCURRENCY` | `5` | Quantos indexers consultar em paralelo |
 | `TORRENT_INDEXER_FALLBACK_MAX_INDEXERS` | `0` | Maximo de indexers (0 = todos ativos) |
 | `TORRENT_INDEXER_FALLBACK_PER_INDEXER_LIMIT` | `0` | Limite de resultados por indexer quando consultando `/indexers/{name}` (0 = sem limite). **OBS**: o endpoint `/indexers/all` não deve receber `limit`; o controle por-indexer é aplicado nas chamadas individuais do slow-path. |
+| `TORRENT_INDEXER_CACHE_PRIMARY_QUERIES` | `2` | Quantas das primeiras queries do Meilisearch (IMDb e título) a Fase 1 sempre espera |
+| `TORRENT_INDEXER_CACHE_EXTRA_GRACE_MS` | `300` | Janela para as outras queries do Meilisearch depois das principais; as que não chegam ficam de fora e a busca conta como incompleta |
+| `TORRENT_INDEXER_LATE_TEXT_MIN_MS` | `800` | Títulos (Cinemeta/TMDB) que chegam depois do `META_BUDGET` disparam as buscas por texto se sobrar pelo menos isto do prazo; senão a busca conta como incompleta e o vazio não vai para o cache negativo |
 
 #### Torrent Indexer — busca hibrida (2 fases)
 

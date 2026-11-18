@@ -12,6 +12,12 @@ export interface SourceFetchOptions {
 }
 
 export abstract class BaseSourceProvider {
+  /**
+   * Fonte principal: quando ela responde com streams, a SourceService espera as
+   * outras só por uma janela curta (SOURCE_GRACE_MS).
+   */
+  readonly primary: boolean = false;
+
   constructor(public name: string) {}
 
   abstract getStreams(
