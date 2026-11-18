@@ -162,11 +162,19 @@ const PT_AUDIO_MARKER = /\b(pt ?br|brazilian|portuguese|portugues|dublado|dublad
 const SUBTITLE_MARKER = /\b(legendado|legendada|leg|subbed)\b/;
 const NATIONAL_MARKER = /\bnacional\b/;
 // Sufixo de áudio que o torrent-indexer anexa ao título: "... (brazilian, eng)".
-const AUDIO_SUFFIX = /\s*\([a-z0-9 ,-]+\)\s*$/i;
+const AUDIO_SUFFIX_CODES = /^[a-z0-9 ,-]+$/i;
 
 /** Tira o sufixo de áudio "(brazilian, eng)" do fim de um título do torrent-indexer. */
 export function stripAudioSuffix(title: string): string {
-  return title.replace(AUDIO_SUFFIX, '');
+  // Linear: AUDIO_SUFFIX com \s* nas duas pontas era quadrática numa sequência
+  // longa de espaços sem "(...)" no fim (auditoria 18/11).
+  const trimmed = title.trimEnd();
+  if (!trimmed.endsWith(')')) return title;
+  const open = trimmed.lastIndexOf('(');
+  if (open < 0) return title;
+  const inner = trimmed.slice(open + 1, -1);
+  if (!AUDIO_SUFFIX_CODES.test(inner)) return title;
+  return trimmed.slice(0, open).trimEnd();
 }
 
 /**

@@ -20,6 +20,34 @@ import {
   LANGUAGE_FLAG_MAP,
 } from './torrent-indexer-shared.js';
 
+
+/** Teto de caracteres para textos de release vindos de fontes externas. */
+export const MAX_RELEASE_TEXT_CHARS = 512;
+
+const TORRENT_TEXT_FIELDS = ['title', 'original_title', 'name', 'filename', 'release', 'file', 'details'] as const;
+const TORRENT_FILE_TEXT_FIELDS = ['path', 'name', 'file'] as const;
+
+function capText(value: string): string {
+  return value.length > MAX_RELEASE_TEXT_CHARS ? value.slice(0, MAX_RELEASE_TEXT_CHARS) : value;
+}
+
+function capTorrentTextFields(record: Record<string, unknown>): void {
+  for (const key of TORRENT_TEXT_FIELDS) {
+    const value = record[key];
+    if (typeof value === 'string') record[key] = capText(value);
+  }
+  const files = record.files;
+  if (!Array.isArray(files)) return;
+  for (const entry of files) {
+    if (!entry || typeof entry !== 'object') continue;
+    const file = entry as Record<string, unknown>;
+    for (const key of TORRENT_FILE_TEXT_FIELDS) {
+      const value = file[key];
+      if (typeof value === 'string') file[key] = capText(value);
+    }
+  }
+}
+
 export class TorrentParser {
   getDedupeKey(stream: SourceStream): string | undefined {
     let base: string | undefined;
@@ -1385,7 +1413,7 @@ export class TorrentParser {
       return undefined;
     }
     try {
-      return new URLSearchParams(query).get('dn')?.trim() || undefined;
+      return capText(new URLSearchParams(query).get('dn') ?? '').trim() || undefined;
     } catch {
       return undefined;
     }
@@ -1400,18 +1428,27 @@ export class TorrentParser {
 
   stripAudioSuffix(title: string): string {
     // Às vezes o sufixo vem repetido: "Nome (brazilian) (brazilian)".
+    // Sem regex: /\s*\(...\)\s*$/ era quadrática numa sequência longa de espaços.
     let stripped = title;
     for (;;) {
-      const match = stripped.match(/\s*\(([^()]*)\)\s*$/);
-      if (!match || match.index === undefined) {
+      const trimmed = stripped.trimEnd();
+      if (!trimmed.endsWith(')')) {
         return stripped;
       }
-      const codes = (match[1] ?? '').split(',').map((code) => code.trim()).filter(Boolean);
+      const open = trimmed.lastIndexOf('(');
+      if (open < 0) {
+        return stripped;
+      }
+      const inner = trimmed.slice(open + 1, -1);
+      if (inner.includes(')')) {
+        return stripped;
+      }
+      const codes = inner.split(',').map((code) => code.trim()).filter(Boolean);
       const isAudioSuffix = codes.length > 0 && codes.every((code) => TorrentParser.AUDIO_SUFFIX_CODES.has(code));
       if (!isAudioSuffix) {
         return stripped;
       }
-      stripped = stripped.slice(0, match.index).trim();
+      stripped = trimmed.slice(0, open).trim();
     }
   }
 
@@ -2087,6 +2124,12 @@ export class TorrentParser {
       if (items.length === 0 && record.torrent) {
         items = [record.torrent as TorrentLike];
       }
+    }
+
+    // Títulos vêm de sites raspados (via torrent-indexer). Sem teto, um título
+    // de centenas de KB travava o event loop nas regexes de limpeza (auditoria 18/11).
+    for (const item of items) {
+      if (item && typeof item === 'object') capTorrentTextFields(item as Record<string, unknown>);
     }
 
     // ── Bypass Adware / Decodificador Base64 (BLUDV) ──

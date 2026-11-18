@@ -13,6 +13,7 @@ const ADDON_MAX_BODY_BYTES = 2 * 1024 * 1024;
 const ADDON_MAX_STREAMS = 200;
 /** Texto examinado por pickSize. */
 const PICK_SIZE_MAX_TEXT = 2048;
+const ADDON_MAX_FIELD_CHARS = 2048;
 
 const FILE_EXT_REGEX = /\.(mkv|mp4|avi|m4v|ts|m2ts|iso|mpg|mpeg|wmv|mov|rar|zip)\b/i;
 const RESOLUTION_REGEX = /\b(2160p|1440p|1080p|720p|576p|480p|360p|240p)\b/i;
@@ -197,7 +198,10 @@ function collectLines(...values: Array<string | undefined>): string[] {
   const lines: string[] = [];
   for (const value of values) {
     if (!value) continue;
+    // Texto do addon (menor confiança): truncado antes de qualquer regex. Um
+    // título de 40 KB custava até 2,6 s síncronos no event loop (auditoria 18/11).
     const parts = String(value)
+      .slice(0, ADDON_MAX_FIELD_CHARS)
       .split('\n')
       .map((line) => line.trim())
       .filter((line) => line.length > 0);
@@ -223,7 +227,7 @@ function pickFileName(
 
 function pickFileNameFromLine(value?: string): string | undefined {
   if (!value) return undefined;
-  const trimmed = value.trim();
+  const trimmed = value.slice(0, ADDON_MAX_FIELD_CHARS).trim();
   if (!trimmed) return undefined;
 
   const fileIconRegex = new RegExp(`^\\uD83D\\uDCC4\\s*`, 'u');
@@ -268,7 +272,7 @@ function extractUrls(lines: string[]): string[] {
     const matches = line.match(URL_REGEX);
     if (!matches) continue;
     for (const match of matches) {
-      const cleaned = match.replace(/[)\].,]+$/g, '').trim();
+      const cleaned = stripTrailingChars(match, ')].,').trim();
       if (cleaned) urls.push(cleaned);
     }
   }
@@ -340,7 +344,7 @@ function pickSource(
 
 function extractSourceFromLine(line: string): string | undefined {
   if (!line) return undefined;
-  const trimmed = line.trim();
+  const trimmed = line.slice(0, ADDON_MAX_FIELD_CHARS).trim();
   if (!trimmed) return undefined;
 
   const gearRegex = new RegExp(`\\u2699(?:\\uFE0F)?\\s*\\[?([^\\]\\s]+)`, 'u');
@@ -373,8 +377,15 @@ function extractSourceFromLine(line: string): string | undefined {
 }
 
 function sanitizeSource(value: string): string | undefined {
-  const cleaned = value.trim().replace(/^[[(]+|[\])]+$/g, '');
+  const cleaned = stripTrailingChars(value.trim().replace(/^[[(]+/, ''), '])');
   return cleaned || undefined;
+}
+
+/** Tira do fim os caracteres de `chars`, em tempo linear (a regex [..]+$ era quadrática). */
+function stripTrailingChars(value: string, chars: string): string {
+  let end = value.length;
+  while (end > 0 && chars.includes(value[end - 1]!)) end--;
+  return value.slice(0, end);
 }
 
 function extractHostname(raw: string): string | undefined {
@@ -460,8 +471,8 @@ function pickSeeders(existing: number | undefined, lines: string[]): number | un
     return existing;
   }
 
-  const combined = lines.join(' ');
-  const seedMatch = combined.match(/(?:seeders?|seeds?)\s*[:-]?\s*(\d{1,7})/i);
+  const combined = lines.join(' ').slice(0, PICK_SIZE_MAX_TEXT * 2);
+  const seedMatch = combined.match(/(?:seeders?|seeds?)[\s:-]{0,4}(\d{1,7})/i);
   if (seedMatch?.[1]) {
     return Number(seedMatch[1]);
   }
