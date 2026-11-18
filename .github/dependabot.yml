@@ -10,3 +10,8 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # Só LTS: a troca de versão maior do Node é manual (o Dependabot levou a
+    # imagem para o 25, que não é LTS). Patches e digests continuam automáticos.
+    ignore:
+      - dependency-name: node
+        update-types: ["version-update:semver-major"]
