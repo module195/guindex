@@ -71,8 +71,13 @@ export function requestCarriesAccessKey(rawUrl: string): boolean {
   } catch {
     return false;
   }
-  if (PUBLIC_PATHS.has(url.pathname)) return true;
-  for (const segment of url.pathname.split('/')) {
+  // Decide pelo caminho cru, o mesmo que o roteador usa. O WHATWG resolve '..',
+  // '%2e%2e' e '\\', e '/resolve/../health' passava como '/health' enquanto o
+  // Fastify despachava para /resolve/:token/:magnet (auditoria 18/11).
+  const queryStart = rawUrl.indexOf('?');
+  const rawPath = queryStart < 0 ? rawUrl : rawUrl.slice(0, queryStart);
+  if (PUBLIC_PATHS.has(rawPath)) return true;
+  for (const segment of rawPath.split('/')) {
     if (!segment) continue;
     let decoded = segment;
     try {
