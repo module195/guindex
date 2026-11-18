@@ -27,7 +27,17 @@ const parseAddonSources = (): BaseSourceProvider[] => {
   ];
 
   const raw = process.env.STREMIO_ADDON_SOURCES;
-  let sourceList: unknown = raw ? JSON.parse(raw) : defaultAddons;
+  let sourceList: unknown = defaultAddons;
+  if (raw) {
+    try {
+      sourceList = JSON.parse(raw);
+    } catch (error) {
+      // JSON inválido não derruba o boot: segue com os defaults e avisa
+      console.warn(
+        `[GuIndex] ⚠️ STREMIO_ADDON_SOURCES não é JSON válido (${error instanceof Error ? error.message : String(error)}); usando defaults.`
+      );
+    }
+  }
 
   if (!Array.isArray(sourceList)) {
     console.warn('[GuIndex] ⚠️ STREMIO_ADDON_SOURCES deve ser um array JSON; usando defaults.');

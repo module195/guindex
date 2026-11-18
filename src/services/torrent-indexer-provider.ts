@@ -39,6 +39,9 @@ import {
   META_BUDGET_MS,
   MAX_CACHE_QUERIES,
   CACHE_TIMEOUT_MS,
+  CACHE_PRIMARY_QUERIES,
+  CACHE_EXTRA_GRACE_MS,
+  LATE_TEXT_MIN_MS,
   MULTI_GRACE_MS,
   TI_MAX_BODY_BYTES,
   MULTI_GRACE_NO_4K_MS,
@@ -173,6 +176,7 @@ export function accountTorrentToTorrentLike(item: TorboxTorrent): TorrentLike {
 }
 
 export class TorrentIndexerProvider extends BaseSourceProvider {
+  override readonly primary = true;
   private readonly baseUrl: string;
   private readonly parser = new TorrentParser();
 
@@ -293,17 +297,39 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     const forceFresh = options?.forceFresh === true;
     const parsed = this.parser.parseId(id);
     const metaLookupId = parsed.imdbId ?? parsed.query ?? (id || '').split(':')[0] ?? id;
+    const reqId = Math.random().toString(36).substring(2, 8).toUpperCase();
+    // Preenchido depois do metadado; os logs do multi por IMDb já saem com o reqId
+    const context: MatchContext = { parsed, type, targetTitles: [], reqId, logName: id };
+    // Prazo da busca inteira, contado desde a chegada do pedido (Cinemeta/TMDB
+    // incluídos), descontada a margem da consulta de cache do debrid.
+    const searchDeadlineAt = startedAt + REQUEST_BUDGET_MS - DEBRID_MARGIN_MS;
+    const remainingMs = () => searchDeadlineAt - Date.now();
+
+    // O multi por IMDb não depende do metadado: sem o Cinemeta em cache, ele sai
+    // já, e não depois de até META_BUDGET_MS. Os títulos vão num segundo multi
+    // quando o metadado chegar (as sub-chamadas por indexer são as mesmas).
+    const earlyImdbMulti =
+      parsed.imdbId && !this.hasFreshCinemeta(type, metaLookupId, forceFresh)
+        ? this.startMultiSearch([parsed.imdbId], remainingMs(), context)
+        : undefined;
+
     // As consultas seguem abertas depois do META_BUDGET: se os títulos não
-    // chegarem a tempo, a busca sai só por IMDb e o filtro de título é refeito
-    // quando eles chegarem, dentro do prazo (lateTitles, no fim da busca).
+    // chegarem a tempo, a busca sai com o metadado vencido em memória ou só por
+    // IMDb, e quando eles chegarem (dentro do prazo) as buscas por texto saem
+    // (lateTitles, no fim da busca).
     const metaPromise = this.fetchCinemetaMeta(type, metaLookupId, forceFresh).catch(() => undefined);
     const localizedPromise = parsed.imdbId
       ? this.fetchLocalizedTitleCandidates(parsed.imdbId, forceFresh).catch(() => [] as string[])
       : Promise.resolve<string[]>([]);
-    const [meta, localizedTitlesRaw] = await Promise.all([
+    const [freshMeta, freshLocalized] = await Promise.all([
       this.awaitWithin(metaPromise, META_BUDGET_MS, undefined),
-      this.awaitWithin(localizedPromise, META_BUDGET_MS, [] as string[]),
+      this.awaitWithin(localizedPromise, META_BUDGET_MS, undefined),
     ]);
+    const meta = freshMeta ?? this.staleCinemeta(type, metaLookupId);
+    const localizedTitlesRaw = freshLocalized ?? this.staleLocalizedTitles(parsed.imdbId);
+    if (freshMeta === undefined && meta !== undefined) {
+      logReq(context, `🕒 Cinemeta sem resposta em ${META_BUDGET_MS}ms; usando o metadado vencido em memória`);
+    }
     let displayTitles = this.parser.collectMetaTitles(meta);
     
     let localizedTitles: string[] = [];
@@ -314,11 +340,11 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
         // Evita chamada duplicada ao Cinemeta quando o lookup acima já foi o mesmo
         const fallback = metaLookupId === parsed.imdbId
           ? meta
-          : await this.awaitWithin(
+          : (await this.awaitWithin(
               this.fetchCinemetaMeta('series', parsed.imdbId, forceFresh),
               Math.max(0, startedAt + META_BUDGET_MS - Date.now()),
               undefined,
-            );
+            )) ?? this.staleCinemeta('series', parsed.imdbId);
         if (fallback?.name) displayTitles.push(fallback.name);
         if (fallback?.aliases) displayTitles.push(...fallback.aliases);
       }
@@ -391,17 +417,13 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
       libraryReady = items;
     });
 
-    const reqId = Math.random().toString(36).substring(2, 8).toUpperCase();
-    const context: MatchContext = {
-      parsed,
-      type,
+    Object.assign(context, {
       targetTitles: displayTitles,
-      reqId,
       logName: targetTitle || queries[0] || id,
       releaseYear,
       episodeTitle,
-      runtimeSeconds
-    };
+      runtimeSeconds,
+    });
 
     const seen = new Set<string>();
     const sourceCounts = new Map<string, number>();
@@ -410,21 +432,25 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     logReq(context, `🚀 Iniciando busca multi-query (Bulk) para: [${uniqueQueries.join(', ')}]`);
 
     const fallbackTitle = targetTitle || queries[0] || id;
-    // Prazo da busca inteira, contado desde a chegada do pedido (Cinemeta/TMDB
-    // incluídos), descontada a margem da consulta de cache do debrid.
-    const searchDeadlineAt = startedAt + REQUEST_BUDGET_MS - DEBRID_MARGIN_MS;
-    const remainingMs = () => searchDeadlineAt - Date.now();
 
     // ═══════════════════════════════════════════════════════
     // FASE 1 — Cache (Meilisearch) + ping no /indexers/multi
     //   O multi sai junto com o cache: busca em tempo real, pode achar o que
     //   o cache ainda não tem, e o que ele raspa vai para o Meilisearch.
     // ═══════════════════════════════════════════════════════
-    const multiPromise = this.startMultiSearch(midPathQueries, remainingMs(), context);
+    const textMidQueries = midPathQueries.filter((q) => q !== parsed.imdbId);
+    const multiPromise = earlyImdbMulti
+      ? this.combineMultiResults([
+          earlyImdbMulti,
+          textMidQueries.length > 0 ? this.startMultiSearch(textMidQueries, remainingMs(), context) : undefined,
+        ])
+      : this.startMultiSearch(midPathQueries, remainingMs(), context);
+    const seriesTarget = type.toLowerCase() === 'movie' ? undefined : { season: parsed.season, episode: parsed.episode };
     const cacheTorrents = await this.fetchBulkMeilisearchResults(
       uniqueQueries.slice(0, MAX_CACHE_QUERIES),
       Math.min(CACHE_TIMEOUT_MS, Math.max(500, remainingMs())),
-      type.toLowerCase() === 'movie' ? undefined : { season: parsed.season, episode: parsed.episode },
+      seriesTarget,
+      { primaryCount: CACHE_PRIMARY_QUERIES, extraGraceMs: CACHE_EXTRA_GRACE_MS, context },
     );
     const fetchedTorrents: TorrentLike[] = [...cacheTorrents];
     const cacheSufficient = this.hasSufficientResults(cacheTorrents, fallbackTitle, context);
@@ -526,8 +552,9 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
 
     // Títulos atrasados: a busca saiu sem eles (só por IMDb) e o filtro
     // descartou todo torrent sem IMDb. Chegando ainda no prazo, o filtro é
-    // refeito sobre o que já voltou, sem nova consulta.
-    if (parsed.imdbId && displayTitles.length === 0 && remainingMs() > 0) {
+    // refeito sobre o que já voltou e as buscas por texto saem (Meilisearch e
+    // multi). Sem prazo para isso, a busca fica marcada como incompleta.
+    if (parsed.imdbId && displayTitles.length === 0) {
       const late = await this.awaitWithin(
         Promise.all([metaPromise, localizedPromise]),
         // Com streams já na mão (torrents com IMDb), espera só mais um META_BUDGET:
@@ -535,13 +562,21 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
         streams.length === 0 ? Math.max(0, remainingMs()) : Math.min(META_BUDGET_MS, Math.max(0, remainingMs())),
         undefined,
       );
-      if (late === undefined) noteIncompleteSearch();
       const lateTitles = late
         ? [...new Set([...(late[1] ?? []), ...this.parser.collectMetaTitles(late[0])])].filter(Boolean)
         : [];
+      // A busca saiu sem títulos: os sites que não aceitam IMDb e os torrents
+      // sem o campo imdb ficaram de fora. Ela só conta como completa se as
+      // buscas por texto rodarem até o fim, senão um vazio aqui seria falso.
+      let textSearchDone = false;
       if (late && lateTitles.length > 0) {
         context.targetTitles = lateTitles;
         context.releaseYear = this.parser.extractReleaseYear(late[0]);
+        const lateEpisodeTitle =
+          parsed.season !== undefined && parsed.episode !== undefined
+            ? this.parser.findEpisodeTitle(late[0], parsed.season, parsed.episode)
+            : undefined;
+        context.episodeTitle = lateEpisodeTitle;
         const before = streams.length;
         streams.push(
           ...this.collectStreamsFromTorrents(
@@ -553,12 +588,38 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
             Math.max(0, 150 - streams.length),
           ),
         );
+        const refiltered = streams.length - before;
+        let fromText = 0;
+        if (remainingMs() >= LATE_TEXT_MIN_MS) {
+          const lateQueries = this.parser
+            .buildTextQueryCandidates(type, parsed, lateTitles, context.releaseYear, lateEpisodeTitle)
+            .filter((q) => q && !IMDB_QUERY_REGEX.test(q));
+          const lateSearch = await this.fetchLateTextResults(lateQueries, lateTitles, remainingMs(), seriesTarget, context);
+          textSearchDone = lateSearch.complete;
+          if (lateSearch.results.length > 0) {
+            fetchedTorrents.push(...lateSearch.results);
+            const beforeText = streams.length;
+            streams.push(
+              ...this.collectStreamsFromTorrents(
+                lateSearch.results,
+                fallbackTitle,
+                context,
+                seen,
+                sourceCounts,
+                Math.max(0, 150 - streams.length),
+              ),
+            );
+            fromText = streams.length - beforeText;
+          }
+        }
         logReq(
           context,
           `🕒 Títulos chegaram depois do META_BUDGET (${Date.now() - startedAt}ms); ` +
-            `filtro refeito: +${streams.length - before} streams`,
+            `filtro refeito: +${refiltered} streams; busca por texto: ` +
+            `+${fromText} streams${textSearchDone ? '' : ' (incompleta: sem tempo ou sem resposta)'}`,
         );
       }
+      if (!textSearchDone) noteIncompleteSearch();
     }
 
     // Aquecimento opcional de queries extras em background
@@ -652,21 +713,52 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     queries: string[],
     budgetMs: number,
     context?: MatchContext,
+    options: { reservePhase3?: boolean } = {},
   ): Promise<TorrentLike[] | undefined> {
     if (!TorrentIndexerProvider.ENABLE_FALLBACK_INDEXER_SEARCH || queries.length === 0) return undefined;
     const startedAt = Date.now();
     const topQueries = queries.slice(0, 3);
     const catalog = await this.fetchIndexerCatalog();
-    if (catalog?.multi === false) return undefined;
+    if (catalog?.multi === false) {
+      logReq(context, `⏭️ Multi não enviado: o torrent-indexer não tem /indexers/multi`);
+      return undefined;
+    }
     // Sem catálogo (/sources fora do ar), o multi vai sem a lista: o servidor
     // usa os indexers ativos dele. Antes, a busca ao vivo nem saía.
-    const indexers = catalog
-      ? (await this.fetchIndexerNames(false)).filter((name) => topQueries.some((q) => this.indexerSupportsQuery(name, q)))
-      : [];
-    if (catalog && indexers.length === 0) return undefined;
+    let indexers: string[] = [];
+    if (catalog) {
+      const accepts = (name: string) => topQueries.some((q) => this.indexerSupportsQuery(name, q));
+      if (!catalog.indexers.some((c) => accepts(c.name) && !this.isDisabledIndexer(c.name))) {
+        logReq(context, `⏭️ Multi não enviado: nenhum indexer do catálogo aceita [${topQueries.join(', ')}]`);
+        return undefined;
+      }
+      this.noteCooledDownIndexers(topQueries);
+      indexers = (await this.fetchIndexerNames(false)).filter(accepts);
+      if (indexers.length === 0) {
+        // Todos os que aceitam a query estão no cooldown local ou healthy:false.
+        // Os saudáveis para o torrent-indexer vão mesmo no cooldown daqui: o
+        // cooldown local não pode tirar a busca ao vivo inteira. Mandar sem a
+        // lista não serve: o multi do servidor não pula um site fora do ar e
+        // conta uma falha por sub-chamada, o que estenderia o bloqueio dele.
+        indexers = catalog.indexers
+          .filter((c) => c.healthy && accepts(c.name) && !this.isDisabledIndexer(c.name))
+          .map((c) => c.name)
+          .sort((a, b) => this.compareIndexerPriority(a, b));
+        noteIncompleteSearch();
+        if (indexers.length === 0) {
+          logReq(context, `⏭️ Multi não enviado: todos os indexers que aceitam a query estão healthy:false no /sources`);
+          return undefined;
+        }
+        logReq(context, `⚠️ Todos os indexers elegíveis no cooldown local; o multi vai com eles mesmo assim`);
+      }
+    }
     const remaining = budgetMs - (Date.now() - startedAt);
-    if (remaining <= 0) return undefined;
-    return this.fetchMultiIndexerSearch(topQueries, indexers, remaining, context);
+    if (remaining <= 0) {
+      logReq(context, `⏭️ Multi não enviado: o prazo acabou antes (catálogo lento)`);
+      noteIncompleteSearch();
+      return undefined;
+    }
+    return this.fetchMultiIndexerSearch(topQueries, indexers, remaining, context, options.reservePhase3 ?? true);
   }
 
   /**
@@ -679,6 +771,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     context?: MatchContext,
   ): Promise<TorrentLike[]> {
     if (!TorrentIndexerProvider.ENABLE_FALLBACK_INDEXER_SEARCH || queries.length === 0) return [];
+    this.noteCooledDownIndexers(queries);
     const indexers = (await this.fetchIndexerNames(false))
       .filter((name) => queries.some((q) => this.indexerSupportsQuery(name, q)));
     if (indexers.length === 0) return [];
@@ -728,6 +821,63 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     } finally {
       if (handle) clearTimeout(handle);
     }
+  }
+
+  /** Junta as respostas de vários multis; `undefined` só se nenhum respondeu. */
+  private async combineMultiResults(
+    parts: Array<Promise<TorrentLike[] | undefined> | undefined>,
+  ): Promise<TorrentLike[] | undefined> {
+    const settled = await Promise.all(parts.map((part) => part ?? Promise.resolve(undefined)));
+    const answered = settled.filter((items): items is TorrentLike[] => Array.isArray(items));
+    if (answered.length === 0) return undefined;
+    return answered.reduce<TorrentLike[]>((acc, items) => this.parser.mergeTorrentResults(acc, items), []);
+  }
+
+  /**
+   * Buscas por texto depois que os títulos chegaram atrasados: Meilisearch e
+   * multi com os títulos, dentro do que sobra do prazo. `complete` só quando as
+   * duas responderam a tempo.
+   */
+  private async fetchLateTextResults(
+    queries: string[],
+    titles: string[],
+    budgetMs: number,
+    seriesTarget: { season?: number; episode?: number } | undefined,
+    context: MatchContext,
+  ): Promise<{ results: TorrentLike[]; complete: boolean }> {
+    if (queries.length === 0 && titles.length === 0) return { results: [], complete: true };
+    const multiQueries = [...new Set(titles)].slice(0, 2);
+    const cachePromise = this.fetchBulkMeilisearchResults(
+      [...new Set([...multiQueries, ...queries])].slice(0, MAX_CACHE_QUERIES),
+      Math.min(CACHE_TIMEOUT_MS, Math.max(0, budgetMs)),
+      seriesTarget,
+      { context },
+    );
+    const multi = this.startMultiSearch(multiQueries, budgetMs, context, { reservePhase3: false });
+    const [cache, multiResults] = await Promise.all([
+      this.awaitWithin(cachePromise, budgetMs, undefined),
+      this.awaitWithin(multi, budgetMs, undefined),
+    ]);
+    const results = this.parser.mergeTorrentResults(cache ?? [], multiResults ?? []);
+    return { results, complete: cache !== undefined && multiResults !== undefined };
+  }
+
+  /** Metadado do Cinemeta guardado e ainda no TTL. */
+  private hasFreshCinemeta(type: string, id: string, forceFresh: boolean): boolean {
+    if (forceFresh) return false;
+    const cached = TorrentIndexerProvider.cinemetaCache.get(`${type}:${id}`);
+    return Boolean(cached && Date.now() - cached.ts < TorrentIndexerProvider.CINEMETA_TTL);
+  }
+
+  /** Último metadado lido do Cinemeta, mesmo vencido (reserva quando a consulta atrasa). */
+  private staleCinemeta(type: string, id: string): CinemetaMeta | undefined {
+    return TorrentIndexerProvider.cinemetaCache.get(`${type}:${id}`)?.data;
+  }
+
+  /** Últimos títulos PT-BR lidos do TMDB, mesmo vencidos; lista vazia se não houver. */
+  private staleLocalizedTitles(imdbId: string | undefined): string[] {
+    if (!imdbId) return [];
+    return TorrentIndexerProvider.localizedTitleCache.get(imdbId.trim().toLowerCase())?.titles ?? [];
   }
 
   private collectStreamsFromTorrents(
@@ -961,7 +1111,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     const names = catalog.indexers
       .filter((c) => includeUnhealthy || c.healthy)
       .map((c) => c.name)
-      .filter((name) => !this.shouldSkipIndexer(name));
+      .filter((name) => !this.shouldSkipIndexer(name, false));
     return names.sort((a, b) => this.compareIndexerPriority(a, b));
   }
 
@@ -986,7 +1136,11 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
       }
       return cached;
     }
-    return this.refreshIndexerCatalog();
+    const catalog = await this.refreshIndexerCatalog();
+    // A consulta pode ser de outro pedido (em voo, compartilhada): a falha
+    // marca este também, já que o sinal de busca incompleta é por pedido.
+    if (!catalog) noteIncompleteSearch();
+    return catalog;
   }
 
   /**
@@ -1088,12 +1242,13 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     queries: string[],
     timeoutMs = 8000,
     seriesTarget?: { season?: number; episode?: number },
+    options: { primaryCount?: number; extraGraceMs?: number; context?: MatchContext } = {},
   ): Promise<TorrentLike[]> {
     const uniqueQueries = [...new Set(queries.map((q) => q.trim()).filter((q) => q.length > 0))];
     if (uniqueQueries.length === 0) return [];
 
-    const settled = await Promise.all(
-      uniqueQueries.map(async (q) => {
+    const failures: string[] = [];
+    const pending = uniqueQueries.map(async (q): Promise<TorrentLike[]> => {
         const url = new URL(`${this.baseUrl}/search`);
         url.searchParams.set('q', q);
         url.searchParams.set('limit', '200');
@@ -1111,18 +1266,43 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
           if (response.statusCode >= 400) {
             await response.body.dump().catch(() => undefined);
             noteIncompleteSearch();
+            failures.push(`HTTP ${response.statusCode}`);
             return [];
           }
           return this.parser.normalizeTorrentPayload(await readJsonCapped(response.body, TI_MAX_BODY_BYTES));
-        } catch {
+        } catch (error) {
           noteIncompleteSearch();
+          failures.push(error instanceof Error ? error.name === 'TimeoutError' ? `timeout de ${timeoutMs}ms` : error.message : String(error));
           return [];
         }
-      }),
-    );
+    });
+
+    // As queries principais (IMDb e título) decidem a Fase 1; as outras entram
+    // se chegarem numa janela curta depois delas. Antes, a query mais lenta das
+    // 8 segurava a Fase 1 inteira. As cortadas deixam a busca incompleta.
+    const primaryCount = Math.min(options.primaryCount ?? pending.length, pending.length);
+    const primary = await Promise.all(pending.slice(0, primaryCount));
+    const extra = pending.slice(primaryCount);
+    let rest: TorrentLike[][] = [];
+    if (extra.length > 0) {
+      const done: Array<TorrentLike[] | undefined> = new Array(extra.length).fill(undefined);
+      extra.forEach((promise, i) => void promise.then((items) => { done[i] = items; }));
+      await this.awaitWithin(Promise.all(extra), options.extraGraceMs ?? timeoutMs, undefined);
+      const cut = done.filter((items) => items === undefined).length;
+      if (cut > 0) {
+        noteIncompleteSearch();
+        logReq(options.context, `⏱️ [Fase 1] ${cut} de ${extra.length} queries extras do Meilisearch ficaram de fora (janela de ${options.extraGraceMs}ms)`);
+      }
+      rest = done.filter((items): items is TorrentLike[] => items !== undefined);
+    }
+    if (failures.length > 0) {
+      console.warn(
+        `[GuIndex] ⚠️ Meilisearch (/search) falhou em ${failures.length} de ${uniqueQueries.length} queries: ${[...new Set(failures)].join('; ')}`,
+      );
+    }
 
     // Em ordem de query (IMDb primeiro), sem repetir torrent
-    return settled.reduce<TorrentLike[]>((acc, items) => this.parser.mergeTorrentResults(acc, items), []);
+    return [...primary, ...rest].reduce<TorrentLike[]>((acc, items) => this.parser.mergeTorrentResults(acc, items), []);
   }
 
   /**
@@ -1135,15 +1315,17 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     indexers: string[],
     budgetMs: number,
     context?: MatchContext,
+    reservePhase3 = true,
   ): Promise<TorrentLike[] | undefined> {
     // O multi precisa responder antes de a Fase 2 desistir dele com o cache
     // vazio (resto − PHASE3_MIN_MS − folga). Com o prazo antigo (orçamento −
     // 1 s), o multi frio chegava logo depois desse corte e a resposta saía
     // só no fim da Fase 3. As sub-chamadas que estourarem seguem no servidor
     // e alimentam o cache do mesmo jeito.
+    // Sem Fase 3 depois (busca por texto dos títulos atrasados), o prazo é o resto todo.
     const deadlineMs = Math.max(
       500,
-      budgetMs - PHASE3_MIN_MS - PHASE3_RESERVE_SLACK_MS - MULTI_RTT_MARGIN_MS,
+      budgetMs - (reservePhase3 ? PHASE3_MIN_MS + PHASE3_RESERVE_SLACK_MS : 0) - MULTI_RTT_MARGIN_MS,
     );
     const url = new URL(`${this.baseUrl}/indexers/multi`);
     for (const q of queries) {
@@ -1474,27 +1656,44 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     return undefined;
   }
 
-  private shouldSkipIndexer(indexerName: string): boolean {
+  private isDisabledIndexer(indexerName: string): boolean {
     const slug = this.parser.normalizeIndexerSlug(indexerName);
-    if (!slug) {
-      return true;
-    }
+    return !slug || TorrentIndexerProvider.DISABLED_INDEXERS.has(slug);
+  }
 
-    if (TorrentIndexerProvider.DISABLED_INDEXERS.has(slug)) {
-      return true;
-    }
+  private isInCooldown(indexerName: string): boolean {
+    const state = TorrentIndexerProvider.indexerFailureState.get(this.parser.normalizeIndexerSlug(indexerName));
+    return Boolean(state && state.cooldownUntil > Date.now());
+  }
 
-    const state = TorrentIndexerProvider.indexerFailureState.get(slug);
-    if (!state) {
-      return false;
-    }
+  /**
+   * `note` marca a busca como incompleta quando o indexer fica de fora pelo
+   * cooldown. Quem filtra a lista inteira (fetchIndexerNames) passa false e
+   * chama noteCooledDownIndexers só com os que a busca usaria.
+   */
+  private shouldSkipIndexer(indexerName: string, note = true): boolean {
+    if (this.isDisabledIndexer(indexerName)) return true;
+    if (!this.isInCooldown(indexerName)) return false;
+    if (note) noteIncompleteSearch();
+    return true;
+  }
 
-    if (state.cooldownUntil > Date.now()) {
-      noteIncompleteSearch();
-      return true;
-    }
-
-    return false;
+  /**
+   * Marca a busca como incompleta se algum indexer saudável que aceitaria estas
+   * queries está no cooldown local. Um indexer no cooldown que a busca nem
+   * usaria (não aceita o tipo de query, desligado ou healthy:false) não conta.
+   */
+  private noteCooledDownIndexers(queries: string[]): void {
+    const catalog = TorrentIndexerProvider.indexerCatalogCache;
+    if (!catalog) return;
+    const cooled = catalog.indexers.some(
+      (c) =>
+        c.healthy &&
+        !this.isDisabledIndexer(c.name) &&
+        this.isInCooldown(c.name) &&
+        queries.some((q) => this.indexerSupportsQuery(c.name, q)),
+    );
+    if (cooled) noteIncompleteSearch();
   }
 
   private recordIndexerFailure(indexerSlug: string): void {
@@ -1509,6 +1708,12 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
         ? Date.now() + TorrentIndexerProvider.INDEXER_FAILURE_COOLDOWN_MS
         : 0,
     });
+    if (shouldCooldown && !(current && current.cooldownUntil > Date.now())) {
+      console.warn(
+        `[GuIndex] 🧊 Indexer ${indexerSlug} no cooldown local por ${Math.round(TorrentIndexerProvider.INDEXER_FAILURE_COOLDOWN_MS / 1000)}s ` +
+          `(${nextFailures} falhas seguidas)`,
+      );
+    }
   }
 
   private clearIndexerFailure(indexerSlug: string): void {
@@ -1519,6 +1724,9 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
 
     if (current.consecutiveFailures === 0 && current.cooldownUntil === 0) {
       return;
+    }
+    if (current.cooldownUntil > 0) {
+      console.info(`[GuIndex] 🧊 Indexer ${indexerSlug} saiu do cooldown local (respondeu ok)`);
     }
 
     TorrentIndexerProvider.indexerFailureState.set(indexerSlug, {
@@ -1638,8 +1846,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
       if (response.statusCode < 200 || response.statusCode >= 300) {
         await response.body.dump().catch(() => undefined);
         console.warn(`[GuIndex] TMDB respondeu HTTP ${response.statusCode} para ${normalizedImdb}; sem títulos PT-BR por ora.`);
-        this.cacheLocalizedTitleFailure(normalizedImdb, forceFresh);
-        return [];
+        return this.cacheLocalizedTitleFailure(normalizedImdb, forceFresh);
       }
 
       const payload = (await response.body.json()) as {
@@ -1666,8 +1873,7 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     } catch (error) {
       // Segue só com os títulos do Cinemeta; tenta o TMDB de novo depois do TTL curto.
       console.warn(`[GuIndex] Falha ao consultar o TMDB para ${normalizedImdb}:`, redactSecrets(error));
-      this.cacheLocalizedTitleFailure(normalizedImdb, forceFresh);
-      return [];
+      return this.cacheLocalizedTitleFailure(normalizedImdb, forceFresh);
     }
 
     const result = Array.from(titles);
@@ -1677,10 +1883,15 @@ export class TorrentIndexerProvider extends BaseSourceProvider {
     return result;
   }
 
-  private cacheLocalizedTitleFailure(imdbId: string, forceFresh: boolean): void {
+  /** Guarda a falha do TMDB e devolve os títulos de uma leitura anterior, se houver. */
+  private cacheLocalizedTitleFailure(imdbId: string, forceFresh: boolean): string[] {
     noteIncompleteSearch();
-    if (forceFresh) return;
-    TorrentIndexerProvider.localizedTitleCache.set(imdbId, { ts: Date.now(), titles: [], failed: true });
+    // Os títulos de uma leitura anterior (vencida) continuam valendo até o TMDB voltar
+    const previous = TorrentIndexerProvider.localizedTitleCache.get(imdbId)?.titles ?? [];
+    if (!forceFresh) {
+      TorrentIndexerProvider.localizedTitleCache.set(imdbId, { ts: Date.now(), titles: previous, failed: true });
+    }
+    return previous;
   }
 
   private mapTorrentToStream(
