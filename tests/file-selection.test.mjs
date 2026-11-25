@@ -49,6 +49,23 @@ const PACKS = {
     files: [f('X.S01E01.mkv', 1 * GB), f('X.S01E01.sample.mkv', 3 * GB)],
     expected: 'X.S01E01.mkv',
   },
+  // TorBox manda o nome com a pasta; o S06E01 da pasta do pack não pode anular o
+  // episódio do arquivo (antes todos empatavam e tocava o maior, o E01).
+  rangeFolderE02: {
+    ctx: { type: 'series', season: 6, episode: 2, title: 'The Chosen S06E01-02-03 1080p WEB-DL DUAL 5.1' },
+    files: [1, 2, 3].map((e) => f(`The.Chosen.S06E01-02-03.1080p.WEB-DL.DUAL.5.1/The.Chosen.S06E0${e}.1080p.WEB-DL.DUAL.5.1.mkv`, (e === 1 ? 1.3 : 1.1) * GB)),
+    expected: 'The.Chosen.S06E01-02-03.1080p.WEB-DL.DUAL.5.1/The.Chosen.S06E02.1080p.WEB-DL.DUAL.5.1.mkv',
+  },
+  rangeFolderE03: {
+    ctx: { type: 'series', season: 6, episode: 3, title: 'The Chosen' },
+    files: [1, 2, 3].map((e) => f(`The.Chosen.S06E01-02-03.1080p/The.Chosen.S06E0${e}.1080p.mkv`, (e === 1 ? 1.3 : 1.1) * GB)),
+    expected: 'The.Chosen.S06E01-02-03.1080p/The.Chosen.S06E03.1080p.mkv',
+  },
+  multiEpisodeFile: {
+    ctx: { type: 'series', season: 1, episode: 2, title: 'X' },
+    files: [f('X.S01E01E02.1080p.mkv', 2 * GB), f('X.S01E03.1080p.mkv', 3 * GB)],
+    expected: 'X.S01E01E02.1080p.mkv',
+  },
   episodeTitle: {
     ctx: { type: 'series', season: 1, episode: 4, title: 'Lost', episodeTitle: 'Walkabout' },
     files: sized(['Lost 1x03 Tabula Rasa.mkv', 'Lost 1x04 Walkabout.mkv', 'Lost 1x05 White Rabbit.mkv']),

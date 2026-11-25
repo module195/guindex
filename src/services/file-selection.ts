@@ -7,6 +7,7 @@
  */
 
 import type { StreamContext } from '../models/source-model.js';
+import { episodesInName } from '../utils/episode-chain.js';
 
 export type FileSelectionContext = StreamContext;
 
@@ -74,7 +75,7 @@ export function scoreFile(file: SelectableFile, context: FileSelectionContext): 
   }
 
   if (context.episode !== undefined) {
-    score += scoreEpisodeMatch(rawPath, normalizedPath, context);
+    score += scoreEpisode(rawPath, normalizedPath, context);
   }
 
   if (context.type === 'movie' && EPISODIC_REGEX.test(rawPath)) score -= 20;
@@ -115,6 +116,22 @@ export function selectBestFile<T>(
   return pool
     .map((entry) => ({ ...entry, score: scoreFile(entry.info, context) }))
     .sort((a, b) => (b.score !== a.score ? b.score - a.score : b.info.bytes - a.info.bytes))[0]?.file;
+}
+
+/**
+ * Pontua o episódio pelo nome do arquivo, sem a pasta. No TorBox o nome vem com
+ * a pasta do torrent, e num pack "Show.S06E01-02-03/Show.S06E02.mkv" o S06E01 da
+ * pasta anulava o episódio do arquivo: todos empatavam e tocava o maior. Só
+ * quando o nome do arquivo não diz episódio nenhum ("Season 1/Dark.mkv") o
+ * caminho inteiro conta.
+ */
+function scoreEpisode(rawPath: string, normalizedPath: string, context: FileSelectionContext): number {
+  const fileName = rawPath.replace(/^.*[\\/]/, '');
+  if (fileName && fileName !== rawPath) {
+    const own = scoreEpisodeMatch(fileName, normalizePath(fileName), context);
+    if (own !== 0 || episodesInName(fileName).size > 0) return own;
+  }
+  return scoreEpisodeMatch(rawPath, normalizedPath, context);
 }
 
 /**
@@ -212,16 +229,13 @@ function scoreEpisodeMatch(rawPath: string, normalizedPath: string, context: Fil
   }
 
   // ────────────────────────────────────────────────────────────────────
-  // 3) Wrong-episode penalty
+  // 3) Wrong-episode penalty: o nome cita episódios e nenhum é o pedido
   // ────────────────────────────────────────────────────────────────────
   if (season !== undefined && matchScore > 0) {
-    const otherEpMatch = rawLower.match(/s\d{1,3}e(\d{1,3})/i) ||
-      rawLower.match(/\d{1,2}[x\u00d7](\d{1,3})/i);
-    if (otherEpMatch) {
-      const detectedEp = parseInt(otherEpMatch[1] ?? '', 10);
-      if (!isNaN(detectedEp) && detectedEp !== episode) {
-        matchScore -= 20;
-      }
+    const named = episodesInName(rawPath);
+    for (const m of rawLower.matchAll(/\d{1,2}[x\u00d7](\d{1,3})/gi)) named.add(Number(m[1]));
+    if (named.size > 0 && !named.has(episode)) {
+      matchScore -= 20;
     }
   }
 

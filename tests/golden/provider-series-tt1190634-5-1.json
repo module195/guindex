@@ -35,7 +35,11 @@
       "season": 5,
       "episode": 1,
       "title": "The.Boys.S05E01-02.1080p.WEB-DL.DUAL.5.1 (brazilian, eng) (2026)",
-      "year": 2026
+      "year": 2026,
+      "episodeList": [
+        1,
+        2
+      ]
     }
   },
   {

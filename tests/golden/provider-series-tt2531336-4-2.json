@@ -137,7 +137,12 @@
       "season": 4,
       "episode": 2,
       "title": "Lupin S04E01-E03 1080p DUAL (2026)",
-      "year": 2026
+      "year": 2026,
+      "episodeList": [
+        1,
+        2,
+        3
+      ]
     }
   }
 ]
