@@ -5,6 +5,7 @@
 
 import type { SourceStream } from '../models/source-model.js';
 import { detectReleaseLanguages, languagesFromAudioValues, reconcileAudioWithRelease, stripAudioSuffix } from './audio-language.js';
+import { episodesInName } from '../utils/episode-chain.js';
 import type {
   ParsedIdInfo,
   CinemetaMeta,
@@ -775,7 +776,7 @@ export class TorrentParser {
 
   /**
    * Episódios que o nome do release cobre: "S02E01-E05", "S02E01-05", "S02E01 ao E05",
-   * "S02E01E02E03", "Episódios 06 ao 13", "Episódio 03 e 04", ou um só ("S02E03", "2x03").
+   * "S02E01E02E03", "S06E01-02-03", "Episódios 06 ao 13", "Episódio 03 e 04", ou um só ("S02E03", "2x03").
    * Lê o texto cru, antes de "-" virar espaço. Sem episódio no nome (pack de temporada),
    * devolve undefined.
    */
@@ -793,12 +794,9 @@ export class TorrentParser {
 
     for (const raw of titles) {
       const text = raw.replace(/[._]/g, ' ');
-      for (const m of text.matchAll(/S\d{1,2}\s?E(\d{1,3})\s*(?:-|a|ao|à|até)\s*E?(\d{1,3})\b/gi)) {
-        addRange(Number(m[1]), Number(m[2]));
-      }
-      for (const m of text.matchAll(/S\d{1,2}((?:E\d{1,3}){2,})/gi)) {
-        for (const ep of m[1]?.match(/\d{1,3}/g) ?? []) episodes.add(Number(ep));
-      }
+      // Só cadeias ("S06E01-02-03", "S02E01 ao 05"); um SxxEyy sozinho fica para o fim.
+      const chain = episodesInName(raw);
+      if (chain.size > 1) chain.forEach((ep) => episodes.add(ep));
       const spaced = text.replace(/-/g, ' - ');
       for (const m of spaced.matchAll(/\bep(?:is[oó]dios?|s?)\s*(\d{1,3})\s*(-|a|ao|à|até|e)\s*(\d{1,3})\b/gi)) {
         if (m[2]?.toLowerCase() === 'e') {
@@ -1167,6 +1165,17 @@ export class TorrentParser {
     };
 
     candidates.forEach(addValue);
+
+    if (numbers.size === 0) {
+      const texts = this.collectSearchableTexts(torrent);
+      for (const text of texts) {
+        const chain = text ? episodesInName(text) : undefined;
+        if (chain && chain.size > 1) {
+          chain.forEach((ep) => numbers.add(ep));
+          break;
+        }
+      }
+    }
 
     if (numbers.size === 0) {
       const texts = this.collectSearchableTexts(torrent);

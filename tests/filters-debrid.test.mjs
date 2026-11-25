@@ -84,6 +84,10 @@ test('série: faixa ou lista de episódios no nome decide', () => {
     ['Breaking Bad S02E03 1080p', true],
     ['Breaking Bad S02E13 1080p', false],
     ['Breaking Bad S02E04-E06 1080p', false],
+    // Cadeia com 3+ números (bludv: "The.Chosen.S06E01-02-03"): antes virava E01-E02
+    ['Breaking Bad S02E01-02-03 1080p', true],
+    ['Breaking Bad S02E02-03-04-05 1080p', true],
+    ['Breaking Bad S02E04-05-06 1080p', false],
     ['Breaking Bad 2x03 Dual', true],
     ['Breaking Bad 2ª Temporada Completa', true],
     ['Breaking Bad 3ª Temporada Completa', false],
